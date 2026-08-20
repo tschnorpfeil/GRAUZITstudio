@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
@@ -7,15 +7,35 @@ interface StudioLightRigProps {
   daylight: number
 }
 
+// Radiale Gradient-Textur für den weichen Glow (einmalig generiert)
+let glowTexCache: THREE.CanvasTexture | null = null
+function getGlowTexture(): THREE.CanvasTexture {
+  if (glowTexCache) return glowTexCache
+  const size = 128
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')!
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  grad.addColorStop(0, 'rgba(255,255,255,1)')
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.5)')
+  grad.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.fillStyle = grad
+  ctx.fillRect(0, 0, size, size)
+  glowTexCache = new THREE.CanvasTexture(canvas)
+  return glowTexCache
+}
+
 /**
- * Premium Studio Luminaire & Sun Orb (AAA Design)
- * Provides tactile visual reference of the studio key light without harsh CAD lines
+ * Studio-Sonnenorb mit weichem radialem Halo
+ * Taktile visuelle Referenz des Studio-Hauptlichts
  */
 export function StudioLightRig({ position, daylight }: StudioLightRigProps) {
   const haloRef = useRef<THREE.Mesh>(null)
+  const glowTex = useMemo(() => getGlowTexture(), [])
 
   useFrame(({ camera }) => {
-    // Billboard the halo to always face the camera
+    // Halo immer zur Kamera billboarden
     if (haloRef.current) {
       haloRef.current.quaternion.copy(camera.quaternion)
     }
@@ -23,31 +43,26 @@ export function StudioLightRig({ position, daylight }: StudioLightRigProps) {
 
   const [x, y, z] = position
   const isNight = daylight < 0.05
-  const orbColor = isNight ? '#2a303c' : '#fff9eb'
-  const glowColor = isNight ? '#1e2430' : '#f1c302'
+  const orbColor = isNight ? '#39404f' : '#fff9eb'
+  const glowColor = isNight ? '#4a5468' : '#ffdf7a'
   const orbScale = isNight ? 0.5 : 0.75 + daylight * 0.35
 
   return (
     <group position={[x, y, z]}>
-      {/* 1. STUDIO SPOTLIGHT CASING / FIXTURE */}
-      <mesh rotation={[0, 0, 0]}>
-        <sphereGeometry args={[0.26, 24, 24]} />
-        <meshStandardMaterial color="#16181d" roughness={0.35} metalness={0.8} />
-      </mesh>
-
-      {/* 2. GLOWING EMITTER LENS CORE */}
+      {/* GLÜHENDER EMITTER-KERN */}
       <mesh scale={orbScale}>
-        <sphereGeometry args={[0.22, 24, 24]} />
+        <sphereGeometry args={[0.3, 24, 24]} />
         <meshBasicMaterial color={orbColor} toneMapped={false} />
       </mesh>
 
-      {/* 3. SOFT BILLBOARDED GLOW HALO */}
-      <mesh ref={haloRef} scale={orbScale * 2.8}>
+      {/* WEICHER RADIALER GLOW-HALO */}
+      <mesh ref={haloRef} scale={orbScale * 5.5}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
+          map={glowTex}
           color={glowColor}
           transparent
-          opacity={isNight ? 0.08 : 0.25 + daylight * 0.3}
+          opacity={isNight ? 0.10 : 0.35 + daylight * 0.3}
           depthWrite={false}
           blending={THREE.AdditiveBlending}
           toneMapped={false}

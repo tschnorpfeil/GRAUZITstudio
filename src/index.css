@@ -19,3 +19,22 @@ body {
   width: 100vw;
   height: 100vh;
 }
+
+/* HUD-Einblendungen (GPU-günstige CSS-Keyframes statt JS-Animation) */
+@keyframes hud-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes hud-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+.anim-fade {
+  animation: hud-fade 0.5s ease both;
+}
+
+.anim-up {
+  animation: hud-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}

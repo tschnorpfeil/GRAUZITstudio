@@ -7,15 +7,15 @@ interface StudioFloorProps {
 }
 
 /**
- * Infinite Studio Stage Floor (Cyclorama)
- * Adapts dynamically between bright daylight showroom and deep midnight studio
+ * Unendlicher Studio-Bühnenboden (Cyclorama) für die 40m-Fahrbahn
+ * Wechselt dynamisch zwischen hellem Showroom und tiefer Mitternachtsbühne
  */
 export function StudioFloor({ daylight = 1.0 }: StudioFloorProps) {
   const matRef = useRef<THREE.ShaderMaterial>(null)
 
   const dayCenter = useMemo(() => new THREE.Color('#cbd5e1'), [])
   const dayEdge = useMemo(() => new THREE.Color('#94a3b8'), [])
-  const nightCenter = useMemo(() => new THREE.Color('#0c0f17'), [])
+  const nightCenter = useMemo(() => new THREE.Color('#0b0e15'), [])
   const nightEdge = useMemo(() => new THREE.Color('#040508'), [])
 
   const floorMat = useMemo(() => {
@@ -39,14 +39,14 @@ export function StudioFloor({ daylight = 1.0 }: StudioFloorProps) {
         uniform float uDaylight;
         varying vec2 vWorldPos2D;
         void main() {
-          float dist = length(vWorldPos2D);
-          float radial = smoothstep(1.5, 14.0, dist);
+          float dist = length(vWorldPos2D - vec2(0.0, -10.0));
+          float radial = smoothstep(5.0, 48.0, dist);
           vec3 baseColor = mix(uColorCenter, uColorEdge, radial);
 
-          // Subtle fine studio grid
-          vec2 grid = abs(fract(vWorldPos2D * 1.0 - 0.5) - 0.5) / fwidth(vWorldPos2D * 1.0);
+          // Feines Studio-Raster nahe der Bühne
+          vec2 grid = abs(fract(vWorldPos2D - 0.5) - 0.5) / fwidth(vWorldPos2D);
           float line = min(grid.x, grid.y);
-          float gridAlpha = (1.0 - min(line, 1.0)) * mix(0.04, 0.08, uDaylight) * (1.0 - smoothstep(3.0, 10.0, dist));
+          float gridAlpha = (1.0 - min(line, 1.0)) * mix(0.03, 0.07, uDaylight) * (1.0 - smoothstep(8.0, 28.0, dist));
 
           vec3 gridColor = mix(vec3(0.0), vec3(1.0), 1.0 - uDaylight * 0.7);
           vec3 finalCol = baseColor + gridColor * gridAlpha;
@@ -66,8 +66,8 @@ export function StudioFloor({ daylight = 1.0 }: StudioFloorProps) {
   })
 
   return (
-    <mesh position={[0, -0.23, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-      <circleGeometry args={[20, 64]} />
+    <mesh position={[0, -0.31, -10]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <circleGeometry args={[70, 64]} />
       <primitive ref={matRef} object={floorMat} attach="material" />
     </mesh>
   )

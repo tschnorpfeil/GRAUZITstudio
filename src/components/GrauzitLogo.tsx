@@ -1,10 +1,10 @@
-export function GrauzitLogo({ className = 'h-14 md:h-16' }: { className?: string; showText?: boolean }) {
+export function GrauzitLogo({ className = 'h-12 md:h-14' }: { className?: string }) {
   return (
-    <div className={`flex items-center ${className}`}>
+    <div className={`inline-flex items-center bg-white/95 px-3 py-2 shadow-xl ${className}`}>
       <img
         src="/grauzit-logo.png"
         alt="GRAUZIT Logo"
-        className="h-full w-auto object-contain drop-shadow-[0_4px_16px_rgba(0,0,0,0.6)]"
+        className="h-full w-auto object-contain"
       />
     </div>
   )

@@ -6,26 +6,28 @@ interface HeadlightProjectorsProps {
   fog: number
 }
 
-/**
- * Photometric Automotive Low-Beam Projector Headlights (ECE R149 Standard)
- */
-export function HeadlightProjectors({
-  daylight,
-  fog,
-}: HeadlightProjectorsProps) {
-  // Auto-activate headlights smoothly and linearly as daylight drops below 0.55
-  const isLightOn = THREE.MathUtils.clamp((0.55 - daylight) / 0.55, 0, 1)
-  const beamIntensity = isLightOn * 48.0
+// Fahrzeugposition (implizit): Front bei z=4.6, Fahrerauge bei z=6
+export const HEADLIGHT_Y = 0.66
+export const HEADLIGHT_Z = 4.6
+export const HEADLIGHT_SEP = 1.36
 
-  // Volumetric Cone Geometry
+/**
+ * Photometrische Abblendlicht-Projektoren (ECE R149) mit langen
+ * volumetrischen Kegeln für die 40m-Fahrbahn
+ */
+export function HeadlightProjectors({ daylight, fog }: HeadlightProjectorsProps) {
+  // Automatisches, lineares Einschalten unterhalb von Daylight 0.55
+  const isLightOn = THREE.MathUtils.clamp((0.55 - daylight) / 0.55, 0, 1)
+  const beamIntensity = isLightOn * 1100
+
+  // Volumetrische Kegel: 22m lang, weich auslaufend
   const coneGeo = useMemo(() => {
-    const geo = new THREE.CylinderGeometry(0.04, 1.8, 7.0, 24, 1, true)
-    geo.translate(0, -3.5, 0)
+    const geo = new THREE.CylinderGeometry(0.05, 3.4, 22.0, 24, 1, true)
+    geo.translate(0, -11.0, 0)
     geo.rotateX(-Math.PI / 2)
     return geo
   }, [])
 
-  // Volumetric Cone Shader Material
   const coneMat = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
@@ -49,9 +51,9 @@ export function HeadlightProjectors({
         varying vec3 vPosition;
         varying vec3 vNormal;
         void main() {
-          float distFade = smoothstep(0.0, -0.4, vPosition.z) * smoothstep(-7.0, -1.5, vPosition.z);
+          float distFade = smoothstep(0.0, -0.6, vPosition.z) * smoothstep(-22.0, -4.5, vPosition.z);
           float edgeFade = pow(1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0))), 2.0);
-          float fogBoost = mix(0.20, 1.8, pow(uFog, 0.75));
+          float fogBoost = mix(0.14, 1.5, pow(uFog, 0.75));
           float alpha = distFade * edgeFade * uIntensity * fogBoost;
           gl_FragColor = vec4(uColor, alpha);
         }
@@ -68,55 +70,47 @@ export function HeadlightProjectors({
     coneMat.uniforms.uFog.value = fog
   }
 
-  const carZ = 3.3
-  const carY = 0.70
-  const lampSeparation = 1.35
-
   const leftTarget = useMemo(() => {
     const obj = new THREE.Object3D()
-    obj.position.set(-0.55, 0.05, -2.5)
+    obj.position.set(-0.6, 0.05, -18)
     return obj
   }, [])
 
   const rightTarget = useMemo(() => {
     const obj = new THREE.Object3D()
-    obj.position.set(0.55, 0.05, -2.5)
+    obj.position.set(0.6, 0.05, -18)
     return obj
   }, [])
 
   return (
-    <group position={[0, 0, 0]}>
+    <group>
       <primitive object={leftTarget} />
       <primitive object={rightTarget} />
 
-      {/* LEFT HEADLIGHT */}
-      <group position={[-lampSeparation / 2, carY, carZ]}>
+      {/* LINKER SCHEINWERFER */}
+      <group position={[-HEADLIGHT_SEP / 2, HEADLIGHT_Y, HEADLIGHT_Z]}>
         <spotLight
           target={leftTarget}
           color="#f4f8ff"
           intensity={beamIntensity}
-          distance={14}
-          angle={Math.PI / 4.2}
-          penumbra={0.55}
+          distance={60}
+          angle={Math.PI / 4.6}
+          penumbra={0.5}
         />
-        {isLightOn > 0.05 && (
-          <mesh geometry={coneGeo} material={coneMat} position={[0, 0, 0]} />
-        )}
+        {isLightOn > 0.05 && <mesh geometry={coneGeo} material={coneMat} />}
       </group>
 
-      {/* RIGHT HEADLIGHT */}
-      <group position={[lampSeparation / 2, carY, carZ]}>
+      {/* RECHTER SCHEINWERFER */}
+      <group position={[HEADLIGHT_SEP / 2, HEADLIGHT_Y, HEADLIGHT_Z]}>
         <spotLight
           target={rightTarget}
           color="#f4f8ff"
           intensity={beamIntensity}
-          distance={14}
-          angle={Math.PI / 4.2}
-          penumbra={0.55}
+          distance={60}
+          angle={Math.PI / 4.6}
+          penumbra={0.5}
         />
-        {isLightOn > 0.05 && (
-          <mesh geometry={coneGeo} material={coneMat} position={[0, 0, 0]} />
-        )}
+        {isLightOn > 0.05 && <mesh geometry={coneGeo} material={coneMat} />}
       </group>
     </group>
   )

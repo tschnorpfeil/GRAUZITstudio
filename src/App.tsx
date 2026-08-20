@@ -1,203 +1,199 @@
 import React, { useRef, useEffect, Suspense } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, ContactShadows } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
 import * as THREE from 'three'
 
-import { RoadSampleSlab } from './components/RoadSampleSlab'
+import { RoadStage } from './components/RoadStage'
+import { SplitDivider } from './components/SplitDivider'
+import { Pedestrians } from './components/Pedestrians'
 import { HeadlightProjectors } from './components/HeadlightProjectors'
 import { StudioRain } from './components/StudioRain'
 import { StudioLightRig } from './components/StudioLightRig'
 import { StudioFloor } from './components/StudioFloor'
+import { NightSky } from './components/NightSky'
+import { TourController } from './components/TourController'
 import { HUD } from './components/HUD'
-import { useSimulationStore } from './store'
+import { useSimulationStore, type CameraMode } from './store'
 
-// Camera Rig for Smooth Studio Perspectives with Free Orbit & Zoom
-const CAMERA_TARGETS = {
+// Kamera-Presets für den Explore-Modus (40m-Fahrbahn)
+const CAMERA_TARGETS: Record<
+  CameraMode,
+  { position: THREE.Vector3; target: THREE.Vector3; fov: number }
+> = {
   driver: {
-    // Pure automotive driver perspective: 1.15m eye height, looking forward along lane
-    position: new THREE.Vector3(0.0, 1.15, 3.6),
-    target: new THREE.Vector3(0.0, 0.15, -1.5),
+    // Authentische Fahrerperspektive: 1.28m Augenhöhe, Blick die Fahrbahn hinab
+    position: new THREE.Vector3(0, 1.28, 6.2),
+    target: new THREE.Vector3(0, 0.35, -12),
+    fov: 52,
   },
   orbit: {
-    position: new THREE.Vector3(3.2, 2.8, 3.8),
-    target: new THREE.Vector3(0.0, 0.1, 0.0),
+    // Von der Standard-Seite: das helle GRAUZIT-Band zieht sich längs durchs Bild
+    position: new THREE.Vector3(-11, 10, 11),
+    target: new THREE.Vector3(0, 0, -8),
+    fov: 42,
   },
   top: {
-    position: new THREE.Vector3(0.0, 6.2, 0.01),
-    target: new THREE.Vector3(0.0, 0.1, 0.0),
+    // Luftaufnahme: die gesamte 40m-Fahrbahn diagonal im Bild
+    position: new THREE.Vector3(17, 19, 9),
+    target: new THREE.Vector3(0, 0, -10),
+    fov: 45,
   },
   macro: {
-    position: new THREE.Vector3(0.85, 0.42, 0.85),
-    target: new THREE.Vector3(0.85, 0.1, 0.0),
+    position: new THREE.Vector3(2.6, 1.35, 4.8),
+    target: new THREE.Vector3(1.2, 0.0, 1.4),
+    fov: 35,
   },
 }
 
 function StudioCameraRig() {
   const controlsRef = useRef<React.ElementRef<typeof OrbitControls>>(null)
   const isTransitioningRef = useRef(false)
-  
-  const cameraMode = useSimulationStore((s) => s.cameraMode)
-  const autoRotate = useSimulationStore((s) => s.autoRotate)
-  const rotateSpeed = useSimulationStore((s) => s.rotateSpeed)
 
-  // Trigger smooth transition only when preset mode changes
+  const cameraMode = useSimulationStore((s) => s.cameraMode)
+  const mode = useSimulationStore((s) => s.mode)
+  const draggingSplit = useSimulationStore((s) => s.draggingSplit)
+
+  // Preset-Wechsel im Explore-Modus (und Rückkehr aus der Tour) weich anfahren
   useEffect(() => {
-    isTransitioningRef.current = true
-  }, [cameraMode])
+    if (mode === 'explore') {
+      isTransitioningRef.current = true
+    }
+  }, [cameraMode, mode])
 
   useFrame((state, delta) => {
-    if (isTransitioningRef.current) {
-      const config = CAMERA_TARGETS[cameraMode]
-      const step = Math.min(1.0, delta * 4.0)
-      state.camera.position.lerp(config.position, step)
-      
-      if (controlsRef.current) {
-        controlsRef.current.target.lerp(config.target, step)
-        controlsRef.current.update()
-      }
+    if (mode !== 'explore' || !isTransitioningRef.current) return
 
-      // Stop transition when close enough to allow 100% free orbit & zoom
-      if (
-        state.camera.position.distanceTo(config.position) < 0.02 &&
-        (!controlsRef.current || controlsRef.current.target.distanceTo(config.target) < 0.02)
-      ) {
-        isTransitioningRef.current = false
-      }
+    const config = CAMERA_TARGETS[cameraMode]
+    const step = Math.min(1.0, delta * 4.0)
+    state.camera.position.lerp(config.position, step)
+
+    const cam = state.camera as THREE.PerspectiveCamera
+    cam.fov = THREE.MathUtils.lerp(cam.fov, config.fov, step)
+    cam.updateProjectionMatrix()
+
+    if (controlsRef.current) {
+      controlsRef.current.target.lerp(config.target, step)
+      controlsRef.current.update()
+    }
+
+    if (
+      state.camera.position.distanceTo(config.position) < 0.02 &&
+      (!controlsRef.current || controlsRef.current.target.distanceTo(config.target) < 0.02)
+    ) {
+      isTransitioningRef.current = false
     }
   })
+
+  // Während der Tour steuert der TourController die Kamera exklusiv
+  if (mode === 'tour') return null
 
   return (
     <OrbitControls
       ref={controlsRef}
+      enabled={!draggingSplit}
       enablePan={true}
       enableZoom={true}
       enableRotate={true}
       enableDamping={true}
       dampingFactor={0.08}
-      autoRotate={autoRotate}
-      autoRotateSpeed={rotateSpeed * 2.0}
-      maxPolarAngle={Math.PI / 2.02}
-      minDistance={0.3}
-      maxDistance={25}
+      autoRotate={mode === 'intro'}
+      autoRotateSpeed={0.5}
+      maxPolarAngle={Math.PI / 2.05}
+      minDistance={0.4}
+      maxDistance={60}
       onStart={() => {
-        // User interacted: cancel any active preset animation immediately
         isTransitioningRef.current = false
       }}
     />
   )
 }
 
+// Wiederverwendete Farbobjekte (keine Allokation pro Frame)
+const _dayBg = new THREE.Color('#d8e2ee')
+const _nightBg = new THREE.Color('#05070d')
+const _bg = new THREE.Color()
+
 function StudioScene() {
   const daylight = useSimulationStore((s) => s.daylight)
   const fog = useSimulationStore((s) => s.fog)
   const lightAngle = useSimulationStore((s) => s.lightAngle)
   const rain = useSimulationStore((s) => s.rain)
-  const cameraMode = useSimulationStore((s) => s.cameraMode)
 
   const lightRad = (lightAngle * Math.PI) / 180
-  const lightX = Math.sin(lightRad) * 4.2
-  const lightZ = Math.cos(lightRad) * 4.2
-  const lightY = 6.2 + daylight * 2.0 // Elevated studio lightbank for steep physical aggregate illumination
+  const lightX = Math.sin(lightRad) * 14
+  const lightZ = Math.cos(lightRad) * 14 - 8
+  const lightY = 12 + daylight * 4
 
-  // Dynamic Daylight Sky / Studio Background (Sun = Bright Showroom, Night = Deep Midnight Stage)
-  const dayBg = new THREE.Color('#d8e2ee')
-  const nightBg = new THREE.Color('#06080e')
-  const currentBg = nightBg.clone().lerp(dayBg, Math.pow(daylight, 0.80))
+  // Dynamischer Himmel: heller Showroom am Tag, tiefe Mitternachtsbühne nachts
+  _bg.copy(_nightBg).lerp(_dayBg, Math.pow(daylight, 0.8))
 
   const fogColor = daylight > 0.4 ? '#b8c7d9' : '#090c14'
-  const fogDensity = fog * 0.12
+  const fogDensity = fog * 0.045
 
   return (
     <>
-      {/* 3D Dynamic Background Color matching daylight */}
-      <color attach="background" args={[currentBg.getStyle()]} />
+      <color attach="background" args={[_bg.getStyle()]} />
 
-      <PerspectiveCamera makeDefault fov={cameraFOV(cameraMode)} />
+      <PerspectiveCamera makeDefault fov={45} position={[-16, 9, 20]} near={0.1} far={250} />
       <StudioCameraRig />
+      <TourController />
 
-      {/* VISIBLE 3D STUDIO LIGHT GIZMO / SUN ORB */}
+      {/* SICHTBARER STUDIO-SONNENORB */}
       <StudioLightRig position={[lightX, lightY, lightZ]} daylight={daylight} />
 
-      {/* DYNAMIC FOG IN STUDIO */}
+      {/* ATMOSPHÄRISCHER NEBEL */}
       {fog > 0.005 && <fogExp2 attach="fog" args={[fogColor, fogDensity]} />}
 
-      {/* HIGH-PERFORMANCE PROCEDURAL STUDIO LIGHTING (Solid baseline floor at night) */}
-      <ambientLight intensity={THREE.MathUtils.lerp(0.35, 0.80, daylight)} color="#ffffff" />
+      {/* STERNENHIMMEL BEI NACHT */}
+      <NightSky daylight={daylight} />
 
-      {/* Studio Key Light (Optimized Shadow Frustum for High FPS) */}
+      {/* STUDIO-BELEUCHTUNG */}
+      <ambientLight intensity={THREE.MathUtils.lerp(0.07, 0.85, daylight)} color="#ffffff" />
+
       <directionalLight
         position={[lightX, lightY, lightZ]}
         intensity={daylight * 2.8}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
         shadow-camera-near={1}
-        shadow-camera-far={20}
-        shadow-camera-left={-3.5}
-        shadow-camera-right={3.5}
-        shadow-camera-top={3.5}
-        shadow-camera-bottom={-3.5}
+        shadow-camera-far={80}
+        shadow-camera-left={-24}
+        shadow-camera-right={24}
+        shadow-camera-top={24}
+        shadow-camera-bottom={-24}
         shadow-bias={-0.0003}
         shadow-normalBias={0.02}
         color="#ffffff"
       />
 
-      {/* Studio Fill Light */}
       <directionalLight
-        position={[-lightX * 0.5, 4, -lightZ * 0.5]}
+        position={[-lightX * 0.5, 8, -lightZ * 0.5]}
         intensity={daylight * 0.85}
         color="#e2e8f0"
       />
 
-      {/* Studio Overhead Softbox */}
-      <directionalLight
-        position={[0, 6, 0]}
-        intensity={daylight * 0.5}
-        color="#f0f4f8"
-      />
+      <directionalLight position={[0, 14, -10]} intensity={daylight * 0.5} color="#f0f4f8" />
 
-      {/* 5-METER ROAD SAMPLE SLAB (CIE 144 & ECE R149 PBR SHADER) */}
-      <RoadSampleSlab
-        rain={rain}
-        daylight={daylight}
-        fog={fog}
-        lightAngle={lightRad}
-      />
+      {/* 40m FAHRBAHN: STANDARD vs. GRAUZIT (CIE 144 & ECE R149 PBR-SHADER) */}
+      <RoadStage />
 
-      {/* PHOTOREALISTIC STUDIO RAIN PARTICLES */}
+      {/* FREI ZIEHBARE VERGLEICHSLINIE */}
+      <SplitDivider />
+
+      {/* SICHERHEITS-SZENARIO: FUSSGÄNGER AUF BEIDEN FAHRSTREIFEN */}
+      <Pedestrians />
+
+      {/* GPU-REGENPARTIKEL */}
       <StudioRain rain={rain} daylight={daylight} />
 
-      {/* ECE R149 PHOTOMETRIC LOW-BEAM HEADLIGHTS (AUTOMATIC AT NIGHT) */}
+      {/* ECE R149 ABBLENDLICHT (AUTOMATISCH BEI NACHT) */}
       <HeadlightProjectors daylight={daylight} fog={fog} />
 
-      {/* SOFT CONTACT SHADOWS UNDER THE SLAB (Cached 1-frame bake for max FPS) */}
-      <ContactShadows
-        position={[0, -0.22, 0]}
-        opacity={0.75}
-        scale={8.5}
-        blur={2.0}
-        far={4.0}
-        color="#000000"
-        frames={1}
-      />
-
-      {/* INFINITE AUTOMOTIVE STUDIO CYCLORAMA STAGE FLOOR */}
+      {/* UNENDLICHER STUDIO-BÜHNENBODEN */}
       <StudioFloor daylight={daylight} />
     </>
   )
-}
-
-function cameraFOV(mode: 'driver' | 'orbit' | 'top' | 'macro'): number {
-  switch (mode) {
-    case 'driver':
-      return 52 // Natural automotive perspective FOV
-    case 'orbit':
-      return 45
-    case 'top':
-      return 40
-    case 'macro':
-      return 30
-  }
 }
 
 export default function App() {
@@ -205,7 +201,7 @@ export default function App() {
     <div className="relative w-full h-full bg-[#08080a] overflow-hidden select-none">
       <Canvas
         shadows
-        dpr={[1, 1.25]}
+        dpr={[1, 1.5]}
         gl={{
           antialias: true,
           toneMapping: THREE.ACESFilmicToneMapping,
@@ -218,10 +214,9 @@ export default function App() {
         </Suspense>
       </Canvas>
 
-      {/* ZERO-COST CINEMATIC CSS VIGNETTE (Zero GPU Fillrate Penalty) */}
+      {/* KOSTENLOSE CSS-VIGNETTE (kein GPU-Fillrate-Overhead) */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(4,4,6,0.65)_100%)]" />
 
-      {/* Studio HUD & Editor Controls */}
       <HUD />
     </div>
   )
