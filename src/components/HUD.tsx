@@ -3,188 +3,11 @@ import * as Slider from '@radix-ui/react-slider'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, ArrowUpRight } from 'lucide-react'
 import * as THREE from 'three'
-import { useSimulationStore, type SimulationState } from '../store'
-import { TOUR_STEPS } from '../tour'
+import { useSimulationStore, SLAB_HALF_WIDTH, type SimulationState } from '../store'
 import { GrauzitLogo } from './GrauzitLogo'
 
 const ACCENT = '#f1c302'
 const GZ_BLUE = '#3875cc'
-
-/* ---------------------------------- Intro ---------------------------------- */
-
-function IntroOverlay() {
-  const startTour = useSimulationStore((s) => s.startTour)
-  const enterExplore = useSimulationStore((s) => s.enterExplore)
-
-  return (
-    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-gradient-to-b from-black/70 via-black/45 to-black/80">
-      <div className="anim-up flex max-w-2xl flex-col items-center gap-6 px-6 text-center">
-        <GrauzitLogo className="h-14 md:h-16" />
-
-        <div className="space-y-3">
-          <div className="text-[11px] font-mono font-bold uppercase tracking-[0.35em] text-[#f1c302]">
-            Interactive Experience
-          </div>
-          <h1 className="text-3xl font-extrabold leading-tight tracking-tight text-white md:text-5xl">
-            Die hellere Straße.
-            <br />
-            Live erleben.
-          </h1>
-          <p className="mx-auto max-w-lg text-sm leading-relaxed text-zinc-300 md:text-base">
-            Standard-Asphalt gegen GRAUZIT® 50/50 Edelsplitt – im direkten Vergleich auf einer
-            40-Meter-Fahrbahn. Tag, Nacht, Starkregen und Wärmebild: Sie steuern alles selbst.
-          </p>
-        </div>
-
-        <div className="flex flex-col items-center gap-3 pt-2 sm:flex-row">
-          <button
-            onClick={startTour}
-            className="cursor-pointer bg-[#f1c302] px-8 py-3.5 text-sm font-bold uppercase tracking-widest text-black shadow-[0_0_40px_rgba(241,195,2,0.35)] transition-transform hover:scale-[1.03] hover:bg-[#ffd52e]"
-          >
-            ▶&ensp;Geführte Demo starten
-          </button>
-          <button
-            onClick={enterExplore}
-            className="cursor-pointer border border-zinc-600 bg-black/50 px-8 py-3.5 text-sm font-semibold uppercase tracking-widest text-zinc-200 transition-colors hover:border-zinc-400 hover:text-white"
-          >
-            Frei erkunden
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2 pt-3 text-[10px] font-mono uppercase tracking-widest text-zinc-500">
-          <span>DIN EN 13108-6</span>
-          <span className="text-zinc-700">/</span>
-          <span>CIE 144 · Klasse A</span>
-          <span className="text-zinc-700">/</span>
-          <span>ECE R149</span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ------------------------------- Tour-Caption ------------------------------- */
-
-function TourCaption() {
-  const tourStep = useSimulationStore((s) => s.tourStep)
-  const tourProgress = useSimulationStore((s) => s.tourProgress)
-  const setTourStep = useSimulationStore((s) => s.setTourStep)
-  const endTour = useSimulationStore((s) => s.endTour)
-
-  const step = TOUR_STEPS[tourStep]
-  if (!step) return null
-
-  return (
-    <div className="pointer-events-auto absolute inset-x-0 bottom-0 z-30 flex justify-center p-4 md:p-8">
-      <div
-        key={step.id}
-        className="anim-up w-full max-w-2xl border border-zinc-800 bg-[#090b10]/92 shadow-2xl backdrop-blur-md"
-      >
-        {/* Kapitel-Fortschritt */}
-        <div className="flex gap-1 p-3 pb-0">
-          {TOUR_STEPS.map((s, i) => (
-            <button
-              key={s.id}
-              onClick={() => setTourStep(i)}
-              className="h-[3px] flex-1 cursor-pointer overflow-hidden bg-zinc-800"
-              aria-label={`Kapitel ${i + 1}`}
-            >
-              <div
-                className="h-full bg-[#f1c302] transition-[width] duration-300 ease-linear"
-                style={{
-                  width: i < tourStep ? '100%' : i === tourStep ? `${tourProgress * 100}%` : '0%',
-                }}
-              />
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-col gap-2 p-5 md:p-6">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono font-bold uppercase tracking-[0.3em] text-[#f1c302]">
-              Kapitel {tourStep + 1} / {TOUR_STEPS.length}
-            </span>
-            <span className="hidden border border-zinc-700/80 bg-black/50 px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-emerald-400 sm:block">
-              {step.metric}
-            </span>
-          </div>
-
-          <h2 className="text-xl font-extrabold tracking-tight text-white md:text-2xl">
-            {step.title}
-          </h2>
-          <p className="text-xs leading-relaxed text-zinc-300 md:text-sm">{step.body}</p>
-
-          <div className="flex items-center justify-between pt-2">
-            <button
-              onClick={() => endTour(false)}
-              className="cursor-pointer text-[11px] font-mono uppercase tracking-widest text-zinc-500 transition-colors hover:text-zinc-200"
-            >
-              ✕ Tour beenden
-            </button>
-            <button
-              onClick={() => {
-                if (tourStep >= TOUR_STEPS.length - 1) endTour(true)
-                else setTourStep(tourStep + 1)
-              }}
-              className="cursor-pointer border border-[#f1c302]/60 bg-[#f1c302]/10 px-5 py-2 text-[11px] font-mono font-bold uppercase tracking-widest text-[#f1c302] transition-colors hover:bg-[#f1c302] hover:text-black"
-            >
-              Weiter →
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* --------------------------------- End-Card --------------------------------- */
-
-function EndCard({ onOpenDataSheet }: { onOpenDataSheet: () => void }) {
-  const startTour = useSimulationStore((s) => s.startTour)
-  const dismissEndCard = useSimulationStore((s) => s.dismissEndCard)
-
-  return (
-    <div className="pointer-events-auto absolute inset-0 z-40 flex items-center justify-center bg-black/55 p-6">
-      <div className="anim-up w-full max-w-lg border border-zinc-800 bg-[#090b10]/95 p-7 text-center shadow-2xl backdrop-blur-md">
-        <div className="text-[10px] font-mono font-bold uppercase tracking-[0.35em] text-[#f1c302]">
-          Demo abgeschlossen
-        </div>
-        <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-white">
-          Überzeugen Sie sich selbst.
-        </h2>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-          Ziehen Sie die goldene Vergleichslinie über die Fahrbahn, wechseln Sie Szenario und
-          Perspektive – oder öffnen Sie das technische Datenblatt.
-        </p>
-        <div className="mt-6 flex flex-col gap-2.5">
-          <button
-            onClick={dismissEndCard}
-            className="cursor-pointer bg-[#f1c302] px-6 py-3 text-sm font-bold uppercase tracking-widest text-black transition-colors hover:bg-[#ffd52e]"
-          >
-            Jetzt frei erkunden
-          </button>
-          <div className="flex gap-2.5">
-            <button
-              onClick={startTour}
-              className="flex-1 cursor-pointer border border-zinc-700 px-4 py-2.5 text-[11px] font-mono uppercase tracking-widest text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white"
-            >
-              ↺ Tour wiederholen
-            </button>
-            <button
-              onClick={() => {
-                dismissEndCard()
-                onOpenDataSheet()
-              }}
-              className="flex-1 cursor-pointer border border-zinc-700 px-4 py-2.5 text-[11px] font-mono uppercase tracking-widest text-zinc-300 transition-colors hover:border-zinc-500 hover:text-white"
-            >
-              Datenblatt öffnen
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 /* ------------------------------ Live-Messwerte ------------------------------ */
 
@@ -359,23 +182,21 @@ const CAMERAS: { id: SimulationState['cameraMode']; label: string }[] = [
   { id: 'driver', label: 'Fahrersicht' },
   { id: 'orbit', label: '3D-Orbit' },
   { id: 'top', label: 'Vogel' },
-  { id: 'macro', label: 'Makro' },
+  { id: 'macro', label: 'Makro-Splitt' },
 ]
 
 function ControlDeck() {
   const condition = useSimulationStore((s) => s.condition)
   const splitX = useSimulationStore((s) => s.splitX)
   const thermal = useSimulationStore((s) => s.thermal)
-  const obstacles = useSimulationStore((s) => s.obstacles)
   const cameraMode = useSimulationStore((s) => s.cameraMode)
   const setCondition = useSimulationStore((s) => s.setCondition)
   const setSplitX = useSimulationStore((s) => s.setSplitX)
   const setThermal = useSimulationStore((s) => s.setThermal)
-  const setObstacles = useSimulationStore((s) => s.setObstacles)
   const setCameraMode = useSimulationStore((s) => s.setCameraMode)
-  const startTour = useSimulationStore((s) => s.startTour)
+  const reset = useSimulationStore((s) => s.reset)
 
-  const gzShare = Math.round(((3.5 - splitX) / 7) * 100)
+  const gzShare = Math.round(((SLAB_HALF_WIDTH - splitX) / (SLAB_HALF_WIDTH * 2)) * 100)
 
   return (
     <div className="pointer-events-auto mx-auto flex w-full max-w-2xl flex-col items-center gap-2">
@@ -434,11 +255,11 @@ function ControlDeck() {
           </div>
           <Slider.Root
             className="relative flex h-5 w-full cursor-pointer touch-none select-none items-center"
-            value={[3.5 - splitX]}
-            max={7}
+            value={[SLAB_HALF_WIDTH - splitX]}
+            max={SLAB_HALF_WIDTH * 2}
             min={0}
-            step={0.02}
-            onValueChange={(vals) => setSplitX(3.5 - vals[0])}
+            step={0.01}
+            onValueChange={(vals) => setSplitX(SLAB_HALF_WIDTH - vals[0])}
           >
             <Slider.Track className="relative h-1 grow bg-zinc-800">
               <Slider.Range className="absolute h-full bg-[#f1c302]/80" />
@@ -450,7 +271,7 @@ function ControlDeck() {
           </Slider.Root>
         </div>
 
-        {/* Ansichts-Toggles + Tour */}
+        {/* Ansichts-Toggles */}
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             onClick={() => setThermal(!thermal)}
@@ -462,22 +283,12 @@ function ControlDeck() {
           >
             ◉ Wärmebild
           </button>
-          <button
-            onClick={() => setObstacles(!obstacles)}
-            className={`cursor-pointer border px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest transition-colors ${
-              obstacles
-                ? 'border-[#25589e] bg-[#0d284f] font-bold text-white'
-                : 'border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-white'
-            }`}
-          >
-            ⬤ Fußgänger-Szenario
-          </button>
           <div className="grow" />
           <button
-            onClick={startTour}
-            className="cursor-pointer border border-[#f1c302]/60 bg-[#f1c302]/10 px-3.5 py-1.5 text-[10px] font-mono font-bold uppercase tracking-widest text-[#f1c302] transition-colors hover:bg-[#f1c302] hover:text-black"
+            onClick={reset}
+            className="cursor-pointer border border-zinc-800 px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest text-zinc-400 transition-colors hover:border-zinc-600 hover:text-white"
           >
-            ▶ Geführte Demo
+            ↺ Zurücksetzen
           </button>
         </div>
       </div>
@@ -510,59 +321,47 @@ function ControlDeck() {
 export function HUD() {
   const [dataSheetOpen, setDataSheetOpen] = useState(false)
 
-  const mode = useSimulationStore((s) => s.mode)
-  const endCard = useSimulationStore((s) => s.endCard)
-
   return (
     <div className="pointer-events-none absolute inset-0 flex select-none flex-col justify-between overflow-hidden p-4 font-sans md:p-8">
       {/* KOPFZEILE: Branding + Legende + Live-Vergleich */}
-      {mode !== 'intro' && (
-        <div className="flex flex-col items-start justify-between gap-4 md:flex-row">
-          <div className="pointer-events-auto flex flex-col gap-2.5">
-            <GrauzitLogo className="h-10 md:h-12" />
-            <div className="hidden items-center gap-2 text-[9px] font-mono uppercase tracking-widest text-zinc-500 md:flex">
-              <span>DIN EN 13108-6</span>
-              <span className="text-zinc-700">/</span>
-              <span>CIE 144 (Klasse A)</span>
-              <span className="text-zinc-700">/</span>
-              <span>ECE R149</span>
+      <div className="flex flex-col items-start justify-between gap-4 md:flex-row">
+        <div className="pointer-events-auto flex flex-col gap-2.5">
+          <GrauzitLogo className="h-10 md:h-12" />
+          <div className="hidden items-center gap-2 text-[9px] font-mono uppercase tracking-widest text-zinc-500 md:flex">
+            <span>DIN EN 13108-6</span>
+            <span className="text-zinc-700">/</span>
+            <span>CIE 144 (Klasse A)</span>
+            <span className="text-zinc-700">/</span>
+            <span>ECE R149</span>
+          </div>
+          <div className="flex items-center gap-2 pt-0.5">
+            <div className="flex items-center gap-2 border border-zinc-800/80 bg-black/70 px-2.5 py-1">
+              <span className="block h-2 w-2 bg-zinc-600" />
+              <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-300">
+                Standard-Asphalt
+              </span>
             </div>
-            <div className="flex items-center gap-2 pt-0.5">
-              <div className="flex items-center gap-2 border border-zinc-800/80 bg-black/70 px-2.5 py-1">
-                <span className="block h-2 w-2 bg-zinc-600" />
-                <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-300">
-                  Standard
-                </span>
-              </div>
-              <span className="font-mono text-[10px] text-[#f1c302]">◂▸</span>
-              <div className="flex items-center gap-2 border border-[#25589e]/80 bg-[#0d284f]/70 px-2.5 py-1">
-                <span className="block h-2 w-2" style={{ background: GZ_BLUE }} />
-                <span className="text-[10px] font-semibold uppercase tracking-wider text-white">
-                  GRAUZIT® 50/50
-                </span>
-              </div>
+            <span className="font-mono text-[10px] text-[#f1c302]">◂▸</span>
+            <div className="flex items-center gap-2 border border-[#25589e]/80 bg-[#0d284f]/70 px-2.5 py-1">
+              <span className="block h-2 w-2" style={{ background: GZ_BLUE }} />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-white">
+                GRAUZIT® 50/50
+              </span>
             </div>
           </div>
-
-          {mode === 'explore' && <MetricsPanel onOpenDataSheet={() => setDataSheetOpen(true)} />}
         </div>
-      )}
+
+        <MetricsPanel onOpenDataSheet={() => setDataSheetOpen(true)} />
+      </div>
 
       {/* FUSSBEREICH */}
-      {mode === 'explore' && !endCard && (
-        <div className="flex flex-col gap-2">
-          <div className="pointer-events-none mx-auto text-[10px] font-mono uppercase tracking-widest text-zinc-500">
-            <span style={{ color: ACCENT }}>◆</span>&ensp;Goldene Linie im 3D ziehen oder Regler
-            nutzen&ensp;·&ensp;Maus: Orbit &amp; Zoom
-          </div>
-          <ControlDeck />
+      <div className="flex flex-col gap-2">
+        <div className="pointer-events-none mx-auto text-[10px] font-mono uppercase tracking-widest text-zinc-500">
+          <span style={{ color: ACCENT }}>◆</span>&ensp;Goldene Linie im 3D ziehen oder Regler
+          nutzen&ensp;·&ensp;Maus: Orbit &amp; Zoom
         </div>
-      )}
-
-      {/* OVERLAYS */}
-      {mode === 'intro' && <IntroOverlay />}
-      {mode === 'tour' && <TourCaption />}
-      {mode === 'explore' && endCard && <EndCard onOpenDataSheet={() => setDataSheetOpen(true)} />}
+        <ControlDeck />
+      </div>
 
       {/* TECHNISCHES DATENBLATT */}
       <Dialog.Root open={dataSheetOpen} onOpenChange={setDataSheetOpen}>

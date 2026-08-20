@@ -1,47 +1,44 @@
 import React, { useRef, useEffect, Suspense } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera, ContactShadows } from '@react-three/drei'
 import * as THREE from 'three'
 
 import { RoadStage } from './components/RoadStage'
 import { SplitDivider } from './components/SplitDivider'
-import { Pedestrians } from './components/Pedestrians'
 import { HeadlightProjectors } from './components/HeadlightProjectors'
 import { StudioRain } from './components/StudioRain'
 import { StudioLightRig } from './components/StudioLightRig'
 import { StudioFloor } from './components/StudioFloor'
 import { NightSky } from './components/NightSky'
-import { TourController } from './components/TourController'
 import { HUD } from './components/HUD'
 import { useSimulationStore, type CameraMode } from './store'
 
-// Kamera-Presets für den Explore-Modus (40m-Fahrbahn)
+// Kamera-Presets für die Studio-Musterplatte
 const CAMERA_TARGETS: Record<
   CameraMode,
   { position: THREE.Vector3; target: THREE.Vector3; fov: number }
 > = {
   driver: {
-    // Authentische Fahrerperspektive: 1.28m Augenhöhe, Blick die Fahrbahn hinab
-    position: new THREE.Vector3(0, 1.28, 6.2),
-    target: new THREE.Vector3(0, 0.35, -12),
+    // Authentische Fahrerperspektive: 1.15m Augenhöhe, Blick entlang der Spur
+    position: new THREE.Vector3(0.0, 1.15, 3.6),
+    target: new THREE.Vector3(0.0, 0.15, -1.5),
     fov: 52,
   },
   orbit: {
-    // Von der Standard-Seite: das helle GRAUZIT-Band zieht sich längs durchs Bild
-    position: new THREE.Vector3(-11, 10, 11),
-    target: new THREE.Vector3(0, 0, -8),
-    fov: 42,
-  },
-  top: {
-    // Luftaufnahme: die gesamte 40m-Fahrbahn diagonal im Bild
-    position: new THREE.Vector3(17, 19, 9),
-    target: new THREE.Vector3(0, 0, -10),
+    position: new THREE.Vector3(3.2, 2.8, 3.8),
+    target: new THREE.Vector3(0.0, 0.1, 0.0),
     fov: 45,
   },
+  top: {
+    position: new THREE.Vector3(0.0, 6.2, 0.01),
+    target: new THREE.Vector3(0.0, 0.1, 0.0),
+    fov: 40,
+  },
   macro: {
-    position: new THREE.Vector3(2.6, 1.35, 4.8),
-    target: new THREE.Vector3(1.2, 0.0, 1.4),
-    fov: 35,
+    // Nahaufnahme direkt an der Trennlinie: beide Gesteinskörnungen im Bild
+    position: new THREE.Vector3(0.55, 0.5, 1.7),
+    target: new THREE.Vector3(0.0, 0.09, 0.55),
+    fov: 30,
   },
 }
 
@@ -50,18 +47,15 @@ function StudioCameraRig() {
   const isTransitioningRef = useRef(false)
 
   const cameraMode = useSimulationStore((s) => s.cameraMode)
-  const mode = useSimulationStore((s) => s.mode)
   const draggingSplit = useSimulationStore((s) => s.draggingSplit)
 
-  // Preset-Wechsel im Explore-Modus (und Rückkehr aus der Tour) weich anfahren
+  // Preset-Wechsel weich anfahren
   useEffect(() => {
-    if (mode === 'explore') {
-      isTransitioningRef.current = true
-    }
-  }, [cameraMode, mode])
+    isTransitioningRef.current = true
+  }, [cameraMode])
 
   useFrame((state, delta) => {
-    if (mode !== 'explore' || !isTransitioningRef.current) return
+    if (!isTransitioningRef.current) return
 
     const config = CAMERA_TARGETS[cameraMode]
     const step = Math.min(1.0, delta * 4.0)
@@ -76,6 +70,7 @@ function StudioCameraRig() {
       controlsRef.current.update()
     }
 
+    // Übergang beenden, sobald angekommen -> 100% freies Orbit & Zoom
     if (
       state.camera.position.distanceTo(config.position) < 0.02 &&
       (!controlsRef.current || controlsRef.current.target.distanceTo(config.target) < 0.02)
@@ -83,9 +78,6 @@ function StudioCameraRig() {
       isTransitioningRef.current = false
     }
   })
-
-  // Während der Tour steuert der TourController die Kamera exklusiv
-  if (mode === 'tour') return null
 
   return (
     <OrbitControls
@@ -96,12 +88,11 @@ function StudioCameraRig() {
       enableRotate={true}
       enableDamping={true}
       dampingFactor={0.08}
-      autoRotate={mode === 'intro'}
-      autoRotateSpeed={0.5}
-      maxPolarAngle={Math.PI / 2.05}
-      minDistance={0.4}
-      maxDistance={60}
+      maxPolarAngle={Math.PI / 2.02}
+      minDistance={0.3}
+      maxDistance={25}
       onStart={() => {
+        // Nutzer greift ein: Preset-Animation sofort abbrechen
         isTransitioningRef.current = false
       }}
     />
@@ -110,7 +101,7 @@ function StudioCameraRig() {
 
 // Wiederverwendete Farbobjekte (keine Allokation pro Frame)
 const _dayBg = new THREE.Color('#d8e2ee')
-const _nightBg = new THREE.Color('#05070d')
+const _nightBg = new THREE.Color('#06080e')
 const _bg = new THREE.Color()
 
 function StudioScene() {
@@ -120,23 +111,22 @@ function StudioScene() {
   const rain = useSimulationStore((s) => s.rain)
 
   const lightRad = (lightAngle * Math.PI) / 180
-  const lightX = Math.sin(lightRad) * 14
-  const lightZ = Math.cos(lightRad) * 14 - 8
-  const lightY = 12 + daylight * 4
+  const lightX = Math.sin(lightRad) * 4.2
+  const lightZ = Math.cos(lightRad) * 4.2
+  const lightY = 6.2 + daylight * 2.0
 
   // Dynamischer Himmel: heller Showroom am Tag, tiefe Mitternachtsbühne nachts
   _bg.copy(_nightBg).lerp(_dayBg, Math.pow(daylight, 0.8))
 
   const fogColor = daylight > 0.4 ? '#b8c7d9' : '#090c14'
-  const fogDensity = fog * 0.045
+  const fogDensity = fog * 0.12
 
   return (
     <>
       <color attach="background" args={[_bg.getStyle()]} />
 
-      <PerspectiveCamera makeDefault fov={45} position={[-16, 9, 20]} near={0.1} far={250} />
+      <PerspectiveCamera makeDefault fov={45} position={[3.2, 2.8, 3.8]} near={0.1} far={120} />
       <StudioCameraRig />
-      <TourController />
 
       {/* SICHTBARER STUDIO-SONNENORB */}
       <StudioLightRig position={[lightX, lightY, lightZ]} daylight={daylight} />
@@ -148,47 +138,55 @@ function StudioScene() {
       <NightSky daylight={daylight} />
 
       {/* STUDIO-BELEUCHTUNG */}
-      <ambientLight intensity={THREE.MathUtils.lerp(0.07, 0.85, daylight)} color="#ffffff" />
+      <ambientLight intensity={THREE.MathUtils.lerp(0.30, 0.80, daylight)} color="#ffffff" />
 
       <directionalLight
         position={[lightX, lightY, lightZ]}
         intensity={daylight * 2.8}
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-near={1}
-        shadow-camera-far={80}
-        shadow-camera-left={-24}
-        shadow-camera-right={24}
-        shadow-camera-top={24}
-        shadow-camera-bottom={-24}
+        shadow-camera-far={20}
+        shadow-camera-left={-3.5}
+        shadow-camera-right={3.5}
+        shadow-camera-top={3.5}
+        shadow-camera-bottom={-3.5}
         shadow-bias={-0.0003}
         shadow-normalBias={0.02}
         color="#ffffff"
       />
 
       <directionalLight
-        position={[-lightX * 0.5, 8, -lightZ * 0.5]}
+        position={[-lightX * 0.5, 4, -lightZ * 0.5]}
         intensity={daylight * 0.85}
         color="#e2e8f0"
       />
 
-      <directionalLight position={[0, 14, -10]} intensity={daylight * 0.5} color="#f0f4f8" />
+      <directionalLight position={[0, 6, 0]} intensity={daylight * 0.5} color="#f0f4f8" />
 
-      {/* 40m FAHRBAHN: STANDARD vs. GRAUZIT (CIE 144 & ECE R149 PBR-SHADER) */}
+      {/* 5m MUSTERPLATTE: STANDARD vs. GRAUZIT (CIE 144 & ECE R149 PBR-SHADER) */}
       <RoadStage />
 
       {/* FREI ZIEHBARE VERGLEICHSLINIE */}
       <SplitDivider />
-
-      {/* SICHERHEITS-SZENARIO: FUSSGÄNGER AUF BEIDEN FAHRSTREIFEN */}
-      <Pedestrians />
 
       {/* GPU-REGENPARTIKEL */}
       <StudioRain rain={rain} daylight={daylight} />
 
       {/* ECE R149 ABBLENDLICHT (AUTOMATISCH BEI NACHT) */}
       <HeadlightProjectors daylight={daylight} fog={fog} />
+
+      {/* WEICHE KONTAKTSCHATTEN UNTER DER PLATTE (1-Frame-Bake für max. FPS) */}
+      <ContactShadows
+        position={[0, -0.22, 0]}
+        opacity={0.75}
+        scale={8.5}
+        blur={2.0}
+        far={4.0}
+        color="#000000"
+        frames={1}
+      />
 
       {/* UNENDLICHER STUDIO-BÜHNENBODEN */}
       <StudioFloor daylight={daylight} />

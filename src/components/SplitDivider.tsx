@@ -2,13 +2,13 @@ import { useEffect, useRef } from 'react'
 import { useFrame, type ThreeEvent } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useSimulationStore, SPLIT_LIMIT } from '../store'
-import { ROAD_LENGTH, ROAD_CENTER_Z } from './RoadStage'
+import { SLAB_LENGTH, SLAB_TOP_Y } from './RoadStage'
 
 const ACCENT = '#f1c302'
 
 /**
- * Frei ziehbare Vergleichslinie: Der Kunde "streicht" die Fahrbahn selbst
- * mit GRAUZIT ein. Leuchtende Klinge + Griff am nahen Fahrbahnende.
+ * Frei ziehbare Vergleichslinie: Der Kunde "streicht" die Musterplatte selbst
+ * mit GRAUZIT ein. Leuchtende Klinge + Griff am nahen Plattenrand.
  */
 export function SplitDivider() {
   const groupRef = useRef<THREE.Group>(null)
@@ -17,7 +17,6 @@ export function SplitDivider() {
   const hoveredRef = useRef(false)
 
   const draggingSplit = useSimulationStore((s) => s.draggingSplit)
-  const mode = useSimulationStore((s) => s.mode)
   const setSplitX = useSimulationStore((s) => s.setSplitX)
   const setDraggingSplit = useSimulationStore((s) => s.setDraggingSplit)
 
@@ -53,21 +52,27 @@ export function SplitDivider() {
   })
 
   const beginDrag = (e: ThreeEvent<PointerEvent>) => {
-    if (mode === 'tour') return
     e.stopPropagation()
     setDraggingSplit(true)
   }
 
-  const onDragMove = (e: ThreeEvent<PointerEvent>) => {
-    setSplitX(THREE.MathUtils.clamp(e.point.x, -SPLIT_LIMIT, SPLIT_LIMIT))
+  const hoverOn = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation()
+    hoveredRef.current = true
+    document.body.style.cursor = 'ew-resize'
+  }
+
+  const hoverOff = () => {
+    hoveredRef.current = false
+    document.body.style.cursor = ''
   }
 
   return (
     <>
       <group ref={groupRef}>
-        {/* Leuchtende Trennlinien-Klinge über die volle Fahrbahnlänge */}
-        <mesh position={[0, 0.012, ROAD_CENTER_Z]}>
-          <boxGeometry args={[0.045, 0.012, ROAD_LENGTH]} />
+        {/* Leuchtende Trennlinien-Klinge über die volle Plattenlänge */}
+        <mesh position={[0, SLAB_TOP_Y + 0.008, 0]}>
+          <boxGeometry args={[0.03, 0.008, SLAB_LENGTH]} />
           <meshBasicMaterial
             ref={bladeMatRef}
             color={ACCENT}
@@ -78,62 +83,48 @@ export function SplitDivider() {
           />
         </mesh>
 
-        {/* Griff-Pylon am nahen Fahrbahnende */}
-        <group position={[0, 0, ROAD_CENTER_Z + ROAD_LENGTH / 2 + 0.55]}>
+        {/* Filigraner Griff-Pylon am nahen Plattenrand */}
+        <group position={[0, SLAB_TOP_Y, SLAB_LENGTH / 2 + 0.25]}>
           <mesh position={[0, 0.09, 0]}>
-            <cylinderGeometry args={[0.035, 0.05, 0.5, 12]} />
+            <cylinderGeometry args={[0.012, 0.02, 0.19, 10]} />
             <meshStandardMaterial color="#26282e" roughness={0.4} metalness={0.7} />
           </mesh>
-          <group ref={gripRef} position={[0, 0.46, 0]}>
+          <group ref={gripRef} position={[0, 0.225, 0]}>
             <mesh>
-              <octahedronGeometry args={[0.13, 0]} />
+              <octahedronGeometry args={[0.055, 0]} />
               <meshBasicMaterial color={ACCENT} toneMapped={false} />
             </mesh>
             {/* Richtungspfeile: signalisiert "hier ziehen" */}
-            <mesh position={[0.26, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
-              <coneGeometry args={[0.055, 0.12, 4]} />
+            <mesh position={[0.105, 0, 0]} rotation={[0, 0, -Math.PI / 2]}>
+              <coneGeometry args={[0.023, 0.05, 4]} />
               <meshBasicMaterial color={ACCENT} toneMapped={false} />
             </mesh>
-            <mesh position={[-0.26, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
-              <coneGeometry args={[0.055, 0.12, 4]} />
+            <mesh position={[-0.105, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+              <coneGeometry args={[0.023, 0.05, 4]} />
               <meshBasicMaterial color={ACCENT} toneMapped={false} />
             </mesh>
           </group>
 
           {/* Große unsichtbare Grab-Zone um den Griff */}
           <mesh
-            position={[0, 0.45, 0]}
+            position={[0, 0.2, 0]}
             onPointerDown={beginDrag}
-            onPointerOver={(e) => {
-              e.stopPropagation()
-              hoveredRef.current = true
-              document.body.style.cursor = 'ew-resize'
-            }}
-            onPointerOut={() => {
-              hoveredRef.current = false
-              document.body.style.cursor = ''
-            }}
+            onPointerOver={hoverOn}
+            onPointerOut={hoverOff}
           >
-            <sphereGeometry args={[0.5, 8, 8]} />
+            <sphereGeometry args={[0.24, 8, 8]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
         </group>
 
         {/* Schmale Grab-Zone entlang der Klinge */}
         <mesh
-          position={[0, 0.1, ROAD_CENTER_Z]}
+          position={[0, SLAB_TOP_Y + 0.05, 0]}
           onPointerDown={beginDrag}
-          onPointerOver={(e) => {
-            e.stopPropagation()
-            hoveredRef.current = true
-            document.body.style.cursor = 'ew-resize'
-          }}
-          onPointerOut={() => {
-            hoveredRef.current = false
-            document.body.style.cursor = ''
-          }}
+          onPointerOver={hoverOn}
+          onPointerOut={hoverOff}
         >
-          <boxGeometry args={[0.3, 0.25, ROAD_LENGTH]} />
+          <boxGeometry args={[0.22, 0.16, SLAB_LENGTH]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
       </group>
@@ -142,11 +133,13 @@ export function SplitDivider() {
       {draggingSplit && (
         <mesh
           rotation={[-Math.PI / 2, 0, 0]}
-          position={[0, 0.02, ROAD_CENTER_Z]}
-          onPointerMove={onDragMove}
+          position={[0, SLAB_TOP_Y, 0]}
+          onPointerMove={(e) => {
+            setSplitX(THREE.MathUtils.clamp(e.point.x, -SPLIT_LIMIT, SPLIT_LIMIT))
+          }}
           onPointerUp={() => setDraggingSplit(false)}
         >
-          <planeGeometry args={[120, 120]} />
+          <planeGeometry args={[60, 60]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
       )}

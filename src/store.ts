@@ -1,7 +1,10 @@
 import { create } from 'zustand'
 
 export type CameraMode = 'driver' | 'orbit' | 'top' | 'macro'
-export type AppMode = 'intro' | 'tour' | 'explore'
+
+// Halbe Plattenbreite (3.6m) minus Randzone
+export const SPLIT_LIMIT = 1.75
+export const SLAB_HALF_WIDTH = 1.8
 
 export interface SimulationState {
   // Master-Szenario: 0.0 = Tag/Trocken -> 0.5 = Nacht/Trocken -> 1.0 = Nacht/Starkregen
@@ -12,19 +15,11 @@ export interface SimulationState {
   lightAngle: number
 
   // Interaktiver Vergleich
-  splitX: number // Weltkoordinate der Trennlinie (-3.5 .. +3.5). Rechts davon: GRAUZIT
+  splitX: number // Weltkoordinate der Trennlinie. Rechts davon: GRAUZIT
   draggingSplit: boolean
 
-  // Ansichten & Szenario-Extras
   thermal: boolean
-  obstacles: boolean
   cameraMode: CameraMode
-
-  // App-Ablauf
-  mode: AppMode
-  tourStep: number
-  tourProgress: number // 0..1 innerhalb des aktuellen Kapitels (grob quantisiert)
-  endCard: boolean
 }
 
 interface SimulationStore extends SimulationState {
@@ -32,14 +27,8 @@ interface SimulationStore extends SimulationState {
   setSplitX: (val: number) => void
   setDraggingSplit: (val: boolean) => void
   setThermal: (val: boolean) => void
-  setObstacles: (val: boolean) => void
   setCameraMode: (val: CameraMode) => void
-  startTour: () => void
-  setTourStep: (val: number) => void
-  setTourProgress: (val: number) => void
-  endTour: (showEndCard: boolean) => void
-  enterExplore: () => void
-  dismissEndCard: () => void
+  reset: () => void
 }
 
 // Smooth Hermite / S-Curve Easing für natürliche physikalische Übergänge
@@ -48,11 +37,9 @@ function smoothstep(t: number): number {
   return c * c * (3 - 2 * c)
 }
 
-export const SPLIT_LIMIT = 3.49
-
 /**
  * Bildet den Master-Regler auf physikalische Umgebungsparameter ab.
- * Phase 1 (0.0 -> 0.5): Tageslicht faellt auf Nacht.
+ * Phase 1 (0.0 -> 0.5): Tageslicht fällt auf Nacht.
  * Phase 2 (0.5 -> 1.0): Regen und Gischt-Nebel ziehen auf.
  */
 export function mapCondition(t: number) {
@@ -62,7 +49,7 @@ export function mapCondition(t: number) {
   return {
     daylight: 1.0 - darkPhase,
     rain: rainPhase,
-    fog: rainPhase * 0.32,
+    fog: rainPhase * 0.30,
     lightAngle: 45 + c * 30,
   }
 }
@@ -76,12 +63,7 @@ const DEFAULT_STATE: SimulationState = {
   splitX: 0.0,
   draggingSplit: false,
   thermal: false,
-  obstacles: false,
   cameraMode: 'orbit',
-  mode: 'intro',
-  tourStep: 0,
-  tourProgress: 0,
-  endCard: false,
 }
 
 export const useSimulationStore = create<SimulationStore>((set) => ({
@@ -97,28 +79,6 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
 
   setDraggingSplit: (draggingSplit) => set({ draggingSplit }),
   setThermal: (thermal) => set({ thermal }),
-  setObstacles: (obstacles) => set({ obstacles }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
-
-  startTour: () =>
-    set({
-      mode: 'tour',
-      tourStep: 0,
-      tourProgress: 0,
-      endCard: false,
-      thermal: false,
-      obstacles: false,
-      // Wipe-Dramaturgie: Tour beginnt mit reiner Standard-Fahrbahn,
-      // GRAUZIT zieht im ersten Kapitel sichtbar ein
-      splitX: SPLIT_LIMIT,
-    }),
-
-  setTourStep: (tourStep) => set({ tourStep, tourProgress: 0 }),
-  setTourProgress: (tourProgress) => set({ tourProgress }),
-
-  endTour: (showEndCard: boolean) =>
-    set({ mode: 'explore', endCard: showEndCard, tourProgress: 0 }),
-
-  enterExplore: () => set({ mode: 'explore', endCard: false }),
-  dismissEndCard: () => set({ endCard: false }),
+  reset: () => set({ ...DEFAULT_STATE }),
 }))

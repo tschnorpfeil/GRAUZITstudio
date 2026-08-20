@@ -23,15 +23,15 @@ export const RoadShader = {
 
     uSplitX: { value: 0.0 },
     uThermal: { value: 0.0 },
-    uTiling: { value: new THREE.Vector2(4.0, 22.0) },
+    uTiling: { value: new THREE.Vector2(3.2, 6.8) },
 
     uRain: { value: 0.0 },
     uDaylight: { value: 1.0 },
     uFog: { value: 0.0 },
     uFogColor: { value: new THREE.Color('#08080c') },
     uTime: { value: 0.0 },
-    uHeadlightPos1: { value: new THREE.Vector3(-0.68, 0.66, 4.6) },
-    uHeadlightPos2: { value: new THREE.Vector3(0.68, 0.66, 4.6) },
+    uHeadlightPos1: { value: new THREE.Vector3(-0.675, 0.65, 3.3) },
+    uHeadlightPos2: { value: new THREE.Vector3(0.675, 0.65, 3.3) },
     uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
     uSunColor: { value: new THREE.Color('#ffffff') },
     uSunIntensity: { value: 1.0 },
@@ -159,18 +159,18 @@ export const RoadShader = {
       vec3 lightDir = lightVec / dist;
 
       float forwardFactor = max(0.20, -lightDir.z);
-      float atten = (1.0 / (1.0 + 0.02 * dist + 0.0035 * dist * dist)) * pow(forwardFactor, 1.35);
+      float atten = (1.0 / (1.0 + 0.02 * dist + 0.003 * dist * dist)) * pow(forwardFactor, 1.35);
 
       vec3 brdf = calcPBR(lightDir, vec3(1.0), pNormal, viewDir, albedo, roughness, F0);
 
       // Diffuse Retroreflexion: GRAUZIT-Quarzkristalle streuen den Beam zurück zum Fahrer
       float retroScatter = mix(
         mix(1.0, 0.35, isPuddle),
-        mix(3.8, 5.0, isPuddle),
+        mix(4.2, 5.5, isPuddle),
         isGz
       );
 
-      return brdf * atten * 28.0 * vec3(1.0, 0.97, 0.93) * retroScatter;
+      return brdf * atten * 34.0 * vec3(1.0, 0.97, 0.93) * retroScatter;
     }
 
     // Intuitive Thermografie-Palette (Turbo-Stil: blau=kalt, rot=heiß)
@@ -210,12 +210,10 @@ export const RoadShader = {
       float stoneRoughness = roughHeightTex.r;
       float macroHeight = roughHeightTex.g;
 
-      // 2. ROLLSPUREN-PATINA: vier Radspuren (zwei pro Fahrstreifen)
-      float tr1 = exp(-pow((vUv.x - 0.136) / 0.055, 2.0));
-      float tr2 = exp(-pow((vUv.x - 0.364) / 0.055, 2.0));
-      float tr3 = exp(-pow((vUv.x - 0.636) / 0.055, 2.0));
-      float tr4 = exp(-pow((vUv.x - 0.864) / 0.055, 2.0));
-      float rollspuren = (tr1 + tr2 + tr3 + tr4) * 0.045;
+      // 2. ROLLSPUREN-PATINA: zwei Radspuren auf der Musterplatte
+      float laneTrackLeft = exp(-pow((vUv.x - 0.24) / 0.10, 2.0));
+      float laneTrackRight = exp(-pow((vUv.x - 0.76) / 0.10, 2.0));
+      float rollspuren = (laneTrackLeft + laneTrackRight) * 0.045;
       float wearModulation = 1.0 - rollspuren;
 
       // 3. MAKRO-VARIATION & natürliche Cluster
@@ -251,7 +249,7 @@ export const RoadShader = {
       vec3 sunBRDF = calcPBR(uSunDirection, uSunColor * uSunIntensity, finalNormal, vViewDirection, finalAlbedo, finalRoughness, finalF0);
 
       // Ambient-Anteil: nachts bewusst niedrig, damit der Kontrast real bleibt
-      float ambientFactor = mix(0.075, 0.48, uDaylight);
+      float ambientFactor = mix(0.18, 0.48, uDaylight);
       vec3 ambientDiffuse = finalAlbedo * ambientFactor * (1.0 / PI);
 
       // 8. PASSIVE NACHT-LUMINANZ der Quarzkristalle (GRAUZIT bleibt sichtbar)
@@ -283,7 +281,7 @@ export const RoadShader = {
       // 11. ATMOSPHÄRISCHER NEBEL & STREUUNG
       if (uFog > 0.005) {
         float distToCam = length(cameraPosition - vWorldPosition);
-        float fogFactor = 1.0 - exp(-pow(distToCam * uFog * 0.10, 1.6));
+        float fogFactor = 1.0 - exp(-pow(distToCam * uFog * 0.18, 1.6));
         finalColor = mix(finalColor, uFogColor, clamp(fogFactor, 0.0, 0.96));
       }
 
@@ -319,8 +317,8 @@ export const RoadMarkingShader = {
     uSunDirection: { value: new THREE.Vector3(0, 1, 0) },
     uSunColor: { value: new THREE.Color('#ffffff') },
     uSunIntensity: { value: 1.0 },
-    uHeadlightPos1: { value: new THREE.Vector3(-0.68, 0.66, 4.6) },
-    uHeadlightPos2: { value: new THREE.Vector3(0.68, 0.66, 4.6) },
+    uHeadlightPos1: { value: new THREE.Vector3(-0.675, 0.65, 3.3) },
+    uHeadlightPos2: { value: new THREE.Vector3(0.675, 0.65, 3.3) },
   },
 
   vertexShader: `
@@ -390,16 +388,16 @@ export const RoadMarkingShader = {
         vec3 lVec1 = uHeadlightPos1 - vWorldPosition;
         float d1 = length(lVec1);
         vec3 lDir1 = lVec1 / d1;
-        float atten1 = (1.0 / (1.0 + 0.03 * d1 + 0.006 * d1 * d1)) * pow(max(0.0, -lDir1.z), 2.5);
+        float atten1 = (1.0 / (1.0 + 0.04 * d1 + 0.01 * d1 * d1)) * pow(max(0.0, -lDir1.z), 2.5);
         float retro1 = max(0.0, dot(vViewDirection, lDir1));
-        vec3 h1 = paintBase * (atten1 * 26.0) * (pow(retro1, 4.0) * 2.2 + 0.35);
+        vec3 h1 = paintBase * (atten1 * 22.0) * (pow(retro1, 4.0) * 2.2 + 0.35);
 
         vec3 lVec2 = uHeadlightPos2 - vWorldPosition;
         float d2 = length(lVec2);
         vec3 lDir2 = lVec2 / d2;
-        float atten2 = (1.0 / (1.0 + 0.03 * d2 + 0.006 * d2 * d2)) * pow(max(0.0, -lDir2.z), 2.5);
+        float atten2 = (1.0 / (1.0 + 0.04 * d2 + 0.01 * d2 * d2)) * pow(max(0.0, -lDir2.z), 2.5);
         float retro2 = max(0.0, dot(vViewDirection, lDir2));
-        vec3 h2 = paintBase * (atten2 * 26.0) * (pow(retro2, 4.0) * 2.2 + 0.35);
+        vec3 h2 = paintBase * (atten2 * 22.0) * (pow(retro2, 4.0) * 2.2 + 0.35);
 
         headlightTotal = (h1 + h2) * autoHeadlight;
       }
@@ -409,7 +407,7 @@ export const RoadMarkingShader = {
 
       if (uFog > 0.005) {
         float distToCam = length(cameraPosition - vWorldPosition);
-        float fogFactor = 1.0 - exp(-pow(distToCam * uFog * 0.10, 1.6));
+        float fogFactor = 1.0 - exp(-pow(distToCam * uFog * 0.18, 1.6));
         finalColor = mix(finalColor, uFogColor, clamp(fogFactor, 0.0, 0.96));
       }
 

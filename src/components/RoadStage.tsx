@@ -6,11 +6,12 @@ import { generateRoadTextures, generateSlabCrossSectionTexture } from '../textur
 import { RoadShader, RoadMarkingShader } from '../shaders/roadShader'
 import { useSimulationStore } from '../store'
 
-// Straßengeometrie: 40m zweistreifige Fahrbahn (RQ 7 nach RAL)
-export const ROAD_LENGTH = 40
-export const ROAD_WIDTH = 7
-export const ROAD_CENTER_Z = -10 // Fahrbahn von z=+10 bis z=-30
-const ROAD_THICKNESS = 0.3
+// Musterplatte: 5.0m Länge x 3.6m Breite x 0.20m Aufbau (wie Original)
+export const SLAB_LENGTH = 5.0
+export const SLAB_WIDTH = 3.6
+export const SLAB_TOP_Y = 0.101 // Weltkoordinate der Fahrbahnoberfläche
+const SLAB_HEIGHT = 0.2
+const HALF_WIDTH = SLAB_WIDTH / 2
 
 // Allokationen aus dem Render-Loop heben (verhindert GC-Stotterer)
 const _sunDir = new THREE.Vector3()
@@ -23,7 +24,8 @@ export function RoadStage() {
   const grauzitTex = useMemo(() => generateRoadTextures(true), [])
   const crossSectionTex = useMemo(() => generateSlabCrossSectionTexture(), [])
 
-  // Ein gemergter Dual-Material-Shader für die gesamte Fahrbahn (1 Draw Call)
+  // Ein gemergter Dual-Material-Shader für die gesamte Platte (1 Draw Call,
+  // frei ziehbare Vergleichslinie via uSplitX)
   const roadMat = useMemo(() => {
     const mat = new THREE.ShaderMaterial({
       uniforms: THREE.UniformsUtils.clone(RoadShader.uniforms),
@@ -36,7 +38,7 @@ export function RoadStage() {
     mat.uniforms.uAlbedoGz.value = grauzitTex.albedo
     mat.uniforms.uNormalGz.value = grauzitTex.normal
     mat.uniforms.uRoughGz.value = grauzitTex.roughness
-    mat.uniforms.uTiling.value.set(4.0, 22.0)
+    mat.uniforms.uTiling.value.set(3.2, 6.8)
     return mat
   }, [standardTex, grauzitTex])
 
@@ -62,28 +64,25 @@ export function RoadStage() {
     })
   }, [])
 
-  // Markierungen: durchgezogene Randlinien + Leitlinie (StVO: 3m Strich / 3m Lücke)
+  // Markierungen: Leitlinien-Striche + durchgezogene Randlinien (StVO)
   const mergedMarkingsGeo = useMemo(() => {
-    const geos: THREE.BufferGeometry[] = []
+    const dash1 = new THREE.PlaneGeometry(0.10, 1.6)
+    dash1.rotateX(-Math.PI / 2)
+    dash1.translate(0, 0.003, -1.5)
 
-    for (let z = -ROAD_LENGTH / 2 + 2; z < ROAD_LENGTH / 2; z += 6) {
-      const dash = new THREE.PlaneGeometry(0.12, 3)
-      dash.rotateX(-Math.PI / 2)
-      dash.translate(0, 0.004, z + 1.5)
-      geos.push(dash)
-    }
+    const dash2 = new THREE.PlaneGeometry(0.10, 1.6)
+    dash2.rotateX(-Math.PI / 2)
+    dash2.translate(0, 0.003, 1.5)
 
-    const leftLine = new THREE.PlaneGeometry(0.12, ROAD_LENGTH)
+    const leftLine = new THREE.PlaneGeometry(0.06, SLAB_LENGTH)
     leftLine.rotateX(-Math.PI / 2)
-    leftLine.translate(-ROAD_WIDTH / 2 + 0.22, 0.004, 0)
-    geos.push(leftLine)
+    leftLine.translate(-HALF_WIDTH + 0.05, 0.003, 0)
 
-    const rightLine = new THREE.PlaneGeometry(0.12, ROAD_LENGTH)
+    const rightLine = new THREE.PlaneGeometry(0.06, SLAB_LENGTH)
     rightLine.rotateX(-Math.PI / 2)
-    rightLine.translate(ROAD_WIDTH / 2 - 0.22, 0.004, 0)
-    geos.push(rightLine)
+    rightLine.translate(HALF_WIDTH - 0.05, 0.003, 0)
 
-    return BufferGeometryUtils.mergeGeometries(geos)
+    return BufferGeometryUtils.mergeGeometries([dash1, dash2, leftLine, rightLine])
   }, [])
 
   // Dynamische Uniforms pro Frame direkt aus dem Store (keine React-Re-Renders)
@@ -103,7 +102,7 @@ export function RoadStage() {
     const sunIntensity = s.daylight * 2.6
     _fogColor.set(s.daylight > 0.4 ? '#181c24' : '#08080c')
 
-    // Weiche Übergänge für Trennlinie & Wärmebild
+    // Weiche Übergänge für Wärmebild
     const u = roadMat.uniforms
     const thermalTarget = s.thermal ? 1.0 : 0.0
     const thermalNow = u.uThermal.value as number
@@ -132,10 +131,10 @@ export function RoadStage() {
   })
 
   return (
-    <group position={[0, 0, ROAD_CENTER_Z]}>
+    <group position={[0, SLAB_HEIGHT / 2, 0]}>
       {/* 1. FAHRBAHNOBERFLÄCHE: ein Mesh, Dual-Material-Shader mit Wipe */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[ROAD_WIDTH, ROAD_LENGTH, 2, 2]} />
+      <mesh position={[0, 0.001, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <planeGeometry args={[SLAB_WIDTH, SLAB_LENGTH, 2, 2]} />
         <primitive object={roadMat} attach="material" />
       </mesh>
 
@@ -144,10 +143,16 @@ export function RoadStage() {
         <primitive object={markingMat} attach="material" />
       </mesh>
 
-      {/* 3. STRASSENAUFBAU-QUERSCHNITT (sichtbare Flanken) */}
-      <mesh position={[0, -ROAD_THICKNESS / 2 - 0.004, 0]} receiveShadow>
-        <boxGeometry args={[ROAD_WIDTH, ROAD_THICKNESS, ROAD_LENGTH]} />
+      {/* 3. STRASSENAUFBAU-QUERSCHNITT (sichtbare Flanken nach RStO) */}
+      <mesh position={[0, -SLAB_HEIGHT / 2 - 0.003, 0]} castShadow receiveShadow>
+        <boxGeometry args={[SLAB_WIDTH, SLAB_HEIGHT, SLAB_LENGTH]} />
         <primitive object={slabSideMaterial} attach="material" />
+      </mesh>
+
+      {/* 4. SOCKEL-AKZENT */}
+      <mesh position={[0, -SLAB_HEIGHT - 0.015, 0]}>
+        <boxGeometry args={[SLAB_WIDTH + 0.08, 0.018, SLAB_LENGTH + 0.08]} />
+        <meshStandardMaterial color="#16181b" roughness={0.6} metalness={0.8} />
       </mesh>
     </group>
   )

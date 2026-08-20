@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { ROAD_LENGTH, ROAD_WIDTH, ROAD_CENTER_Z } from './RoadStage'
 
 interface StudioRainProps {
   rain: number
@@ -9,14 +8,14 @@ interface StudioRainProps {
 }
 
 /**
- * Ultraleichte GPU-Regenpartikel über der gesamten 40m-Fahrbahn
+ * Ultraleichte GPU-Regenpartikel über der Studio-Bühne
  * (ein Draw Call, LineSegments, konstant 60+ FPS auf iGPUs)
  */
 export function StudioRain({ rain, daylight }: StudioRainProps) {
-  const count = 1300
-  const areaW = ROAD_WIDTH + 3
-  const areaL = ROAD_LENGTH + 4
-  const fallHeight = 6.0
+  const count = 750
+  const areaW = 7
+  const areaL = 9
+  const fallHeight = 4.5
 
   const rainMat = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -63,9 +62,9 @@ export function StudioRain({ rain, daylight }: StudioRainProps) {
 
     for (let i = 0; i < count; i++) {
       const x = (Math.random() - 0.5) * areaW
-      const z = ROAD_CENTER_Z + (Math.random() - 0.5) * areaL
-      const len = 0.18 + Math.random() * 0.14
-      const spd = 7.0 + Math.random() * 5.0
+      const z = (Math.random() - 0.5) * areaL
+      const len = 0.16 + Math.random() * 0.12
+      const spd = 6.5 + Math.random() * 4.5
       const off = Math.random() * fallHeight
 
       positions[i * 6] = x
@@ -87,7 +86,7 @@ export function StudioRain({ rain, daylight }: StudioRainProps) {
     geo.setAttribute('speed', new THREE.BufferAttribute(speeds, 1))
     geo.setAttribute('offset', new THREE.BufferAttribute(offsets, 1))
     return geo
-  }, [areaW, areaL])
+  }, [])
 
   useFrame(({ clock }) => {
     if (rain < 0.005) return

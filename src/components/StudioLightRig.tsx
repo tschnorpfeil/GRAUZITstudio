@@ -51,12 +51,12 @@ export function StudioLightRig({ position, daylight }: StudioLightRigProps) {
     <group position={[x, y, z]}>
       {/* GLÜHENDER EMITTER-KERN */}
       <mesh scale={orbScale}>
-        <sphereGeometry args={[0.3, 24, 24]} />
+        <sphereGeometry args={[0.26, 24, 24]} />
         <meshBasicMaterial color={orbColor} toneMapped={false} />
       </mesh>
 
       {/* WEICHER RADIALER GLOW-HALO */}
-      <mesh ref={haloRef} scale={orbScale * 5.5}>
+      <mesh ref={haloRef} scale={orbScale * 4.5}>
         <planeGeometry args={[1, 1]} />
         <meshBasicMaterial
           map={glowTex}
