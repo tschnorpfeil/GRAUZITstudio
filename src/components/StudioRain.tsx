@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
@@ -88,15 +88,27 @@ export function StudioRain({ rain, daylight }: StudioRainProps) {
     return geo
   }, [])
 
-  useFrame(({ clock }) => {
-    if (rain < 0.005) return
-    rainMat.uniforms.uTime.value = clock.getElapsedTime()
-    rainMat.uniforms.uRain.value = rain
-    rainMat.uniforms.uColor.value.set(daylight > 0.4 ? '#e2edf8' : '#a0b8d8')
+  const groupRef = useRef<THREE.Group>(null)
+  const curRain = useRef(0.0)
+
+  useFrame(({ clock }, delta) => {
+    const lambda = 5.0
+    curRain.current = THREE.MathUtils.damp(curRain.current, rain, lambda, delta)
+
+    const r = curRain.current
+    if (groupRef.current) {
+      groupRef.current.visible = r > 0.002
+    }
+
+    if (r > 0.002) {
+      rainMat.uniforms.uTime.value = clock.getElapsedTime()
+      rainMat.uniforms.uRain.value = r
+      rainMat.uniforms.uColor.value.set(daylight > 0.4 ? '#e2edf8' : '#a0b8d8')
+    }
   })
 
   return (
-    <group visible={rain > 0.005}>
+    <group ref={groupRef} visible={false}>
       <lineSegments geometry={rainGeo} material={rainMat} frustumCulled={false} />
     </group>
   )

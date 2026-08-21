@@ -2,10 +2,6 @@ import { create } from 'zustand'
 
 export type CameraMode = 'driver' | 'orbit' | 'top' | 'macro'
 
-// Halbe Plattenbreite (3.6m) minus Randzone
-export const SPLIT_LIMIT = 1.75
-export const SLAB_HALF_WIDTH = 1.8
-
 export interface SimulationState {
   // Master-Szenario: 0.0 = Tag/Trocken -> 0.5 = Nacht/Trocken -> 1.0 = Nacht/Starkregen
   condition: number
@@ -14,18 +10,12 @@ export interface SimulationState {
   fog: number
   lightAngle: number
 
-  // Interaktiver Vergleich
-  splitX: number // Weltkoordinate der Trennlinie. Rechts davon: GRAUZIT
-  draggingSplit: boolean
-
   thermal: boolean
   cameraMode: CameraMode
 }
 
 interface SimulationStore extends SimulationState {
   setCondition: (val: number) => void
-  setSplitX: (val: number) => void
-  setDraggingSplit: (val: boolean) => void
   setThermal: (val: boolean) => void
   setCameraMode: (val: CameraMode) => void
   reset: () => void
@@ -60,8 +50,6 @@ const DEFAULT_STATE: SimulationState = {
   rain: 0.0,
   fog: 0.0,
   lightAngle: 45,
-  splitX: 0.0,
-  draggingSplit: false,
   thermal: false,
   cameraMode: 'orbit',
 }
@@ -74,10 +62,6 @@ export const useSimulationStore = create<SimulationStore>((set) => ({
     set({ condition: clamped, ...mapCondition(clamped) })
   },
 
-  setSplitX: (val: number) =>
-    set({ splitX: Math.max(-SPLIT_LIMIT, Math.min(SPLIT_LIMIT, val)) }),
-
-  setDraggingSplit: (draggingSplit) => set({ draggingSplit }),
   setThermal: (thermal) => set({ thermal }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
   reset: () => set({ ...DEFAULT_STATE }),

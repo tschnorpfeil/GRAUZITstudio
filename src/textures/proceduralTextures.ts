@@ -16,7 +16,7 @@ const textureCache = new Map<string, RoadTextureSet>()
  * dense asphalt mastic filler, and smooth anti-aliased normal maps.
  */
 export function generateRoadTextures(isGrauzit: boolean): RoadTextureSet {
-  const cacheKey = `${isGrauzit ? 'grauzit_v4' : 'standard_v4'}`
+  const cacheKey = `${isGrauzit ? 'grauzit_v5' : 'standard_v5'}`
   if (textureCache.has(cacheKey)) {
     return textureCache.get(cacheKey)!
   }
@@ -47,17 +47,17 @@ export function generateRoadTextures(isGrauzit: boolean): RoadTextureSet {
   // 1. Fill base mastic/bitumen matrix with natural micro-mineral porosity
   const baseImageData = albedoCtx.createImageData(width, height)
   for (let i = 0; i < baseImageData.data.length; i += 4) {
-    const noise = (Math.random() - 0.5) * 14
+    const noise = (Math.random() - 0.5) * 12
     if (isGrauzit) {
-      // GRAUZIT: Lighter bitumen mastic dusted with fine quartz aggregate filler
-      baseImageData.data[i] = Math.max(0, Math.min(255, 42 + noise))
-      baseImageData.data[i + 1] = Math.max(0, Math.min(255, 45 + noise))
-      baseImageData.data[i + 2] = Math.max(0, Math.min(255, 48 + noise))
+      // GRAUZIT: Bitumenmatrix mit feinem Quarzmehl- und Grauwacke-Füller
+      baseImageData.data[i] = Math.max(0, Math.min(255, 48 + noise))
+      baseImageData.data[i + 1] = Math.max(0, Math.min(255, 52 + noise))
+      baseImageData.data[i + 2] = Math.max(0, Math.min(255, 56 + noise))
     } else {
-      // Standard Asphalt: Deep dark bituminous binder
-      baseImageData.data[i] = Math.max(0, Math.min(255, 20 + noise))
-      baseImageData.data[i + 1] = Math.max(0, Math.min(255, 21 + noise))
-      baseImageData.data[i + 2] = Math.max(0, Math.min(255, 22 + noise))
+      // Standard Asphalt: Dunkle Bitumen-Klebemasse
+      baseImageData.data[i] = Math.max(0, Math.min(255, 34 + noise))
+      baseImageData.data[i + 1] = Math.max(0, Math.min(255, 36 + noise))
+      baseImageData.data[i + 2] = Math.max(0, Math.min(255, 38 + noise))
     }
     baseImageData.data[i + 3] = 255
   }
@@ -65,10 +65,10 @@ export function generateRoadTextures(isGrauzit: boolean): RoadTextureSet {
 
   const roughImageData = roughnessCtx.createImageData(width, height)
   for (let i = 0; i < roughImageData.data.length; i += 4) {
-    const noise = (Math.random() - 0.5) * 20
-    const rVal = Math.max(0, Math.min(255, 185 + noise))
+    const noise = (Math.random() - 0.5) * 16
+    const rVal = Math.max(0, Math.min(255, 190 + noise))
     roughImageData.data[i] = rVal // R: Roughness
-    roughImageData.data[i + 1] = Math.max(0, Math.min(255, 30 + Math.random() * 15)) // G: Void depth
+    roughImageData.data[i + 1] = Math.max(0, Math.min(255, 35 + Math.random() * 15)) // G: Void depth
     roughImageData.data[i + 2] = rVal
     roughImageData.data[i + 3] = 255
   }
@@ -88,7 +88,7 @@ export function generateRoadTextures(isGrauzit: boolean): RoadTextureSet {
     const cy = rng(seed++) * height
     // Radius: 4.0px to 9.5px (calibrated to 2/4 mm physical scale on 1024 canvas)
     const radius = rng(seed++) * 5.5 + 4.0
-    const isQuartz = isGrauzit && rng(seed++) > 0.46 // ~50% Henauer Quarzit in GRAUZIT
+    const isQuartz = isGrauzit && rng(seed++) > 0.48 // ~50% Henauer Quarzit in GRAUZIT
 
     let stoneR = 0
     let stoneG = 0
@@ -97,30 +97,30 @@ export function generateRoadTextures(isGrauzit: boolean): RoadTextureSet {
     let heightVal = 0
 
     if (isQuartz) {
-      // Henauer Quarzit: Radiant light creamy-white/silver with faint crystalline warmth
-      const bright = Math.floor(rng(seed++) * 25 + 215)
-      const warmth = Math.floor(rng(seed++) * 8)
+      // Henauer Quarzit: Helles, elegantes Kristallquarz-Silber/Weiß (nicht überstrahlend!)
+      const bright = Math.floor(rng(seed++) * 30 + 160) // 160..190 (klar heller Kontrast, behält Textur)
+      const warmth = Math.floor(rng(seed++) * 6)
       stoneR = bright + warmth
-      stoneG = bright + Math.floor(warmth * 0.5)
-      stoneB = bright
-      roughVal = Math.floor(rng(seed++) * 20 + 25) // Smooth crystalline facets = brilliant specular glints
+      stoneG = bright + Math.floor(warmth * 0.4)
+      stoneB = bright + 4
+      roughVal = Math.floor(rng(seed++) * 25 + 75) // Kristalline Facetten, feine Mikroglanzpunkte
       heightVal = Math.floor(rng(seed++) * 25 + 230)
     } else if (isGrauzit) {
-      // Treis-Kardener Grauwacke: Natural slate-grey / blue-grey mineral contrast
-      const grey = Math.floor(rng(seed++) * 35 + 110)
+      // Treis-Kardener Grauwacke: Natürliches Schiefergrau / Blaugrau
+      const grey = Math.floor(rng(seed++) * 30 + 95) // 95..125
       stoneR = grey
-      stoneG = grey + 3
-      stoneB = grey + 7
-      roughVal = Math.floor(rng(seed++) * 25 + 110)
+      stoneG = grey + 4
+      stoneB = grey + 8
+      roughVal = Math.floor(rng(seed++) * 25 + 135)
       heightVal = Math.floor(rng(seed++) * 25 + 200)
     } else {
-      // Standard Basalt / Dark Aggregate (Uniform dark charcoal)
-      const dark = Math.floor(rng(seed++) * 25 + 32)
+      // Standard Basalt / Diabase (Dunkler Naturstein mit sichtbarer Textur)
+      const dark = Math.floor(rng(seed++) * 30 + 58) // 58..88 (deutlich sichtbar, kein schwarzes Loch)
       stoneR = dark
-      stoneG = dark + 1
-      stoneB = dark + 2
-      roughVal = Math.floor(rng(seed++) * 30 + 160)
-      heightVal = Math.floor(rng(seed++) * 30 + 170)
+      stoneG = dark + 2
+      stoneB = dark + 4
+      roughVal = Math.floor(rng(seed++) * 30 + 165)
+      heightVal = Math.floor(rng(seed++) * 30 + 175)
     }
 
     const numPoints = Math.floor(rng(seed++) * 3) + 5
@@ -303,66 +303,5 @@ export function generateMarkingTexture(size = 128): THREE.CanvasTexture {
   tex.needsUpdate = true
 
   markingTexCache = tex
-  return tex
-}
-
-let crossSectionTexCache: THREE.CanvasTexture | null = null
-
-/**
- * Stratified Road Construction Cross-Section Texture (Asphaltaufbau nach RStO)
- */
-export function generateSlabCrossSectionTexture(): THREE.CanvasTexture {
-  if (crossSectionTexCache) return crossSectionTexCache
-
-  const width = 512
-  const height = 128
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')!
-
-  // Layer 1: Deckschicht (Top 20% -> 0 to 4cm)
-  ctx.fillStyle = '#1e2126'
-  ctx.fillRect(0, 0, width, height * 0.22)
-
-  // Layer 2: Asphaltbinderschicht (Middle 40% -> 4 to 12cm)
-  ctx.fillStyle = '#16181b'
-  ctx.fillRect(0, height * 0.22, width, height * 0.40)
-
-  // Layer 3: Asphalttragschicht (Bottom 40% -> 12 to 20cm)
-  ctx.fillStyle = '#111214'
-  ctx.fillRect(0, height * 0.62, width, height * 0.38)
-
-  for (let i = 0; i < 600; i++) {
-    const x = Math.random() * width
-    const y = Math.random() * height
-    const isTop = y < height * 0.22
-    const isMid = y >= height * 0.22 && y < height * 0.62
-
-    const r = isTop ? Math.random() * 2.5 + 1.2 : isMid ? Math.random() * 4.0 + 2.0 : Math.random() * 6.0 + 3.0
-    const brightness = Math.floor(Math.random() * (isTop ? 120 : 60) + 40)
-    ctx.fillStyle = `rgb(${brightness}, ${brightness + 2}, ${brightness + 4})`
-    ctx.beginPath()
-    ctx.arc(x, y, r, 0, Math.PI * 2)
-    ctx.fill()
-  }
-
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(0, height * 0.22)
-  ctx.lineTo(width, height * 0.22)
-  ctx.moveTo(0, height * 0.62)
-  ctx.lineTo(width, height * 0.62)
-  ctx.stroke()
-
-  const tex = new THREE.CanvasTexture(canvas)
-  tex.wrapS = THREE.RepeatWrapping
-  tex.wrapT = THREE.ClampToEdgeWrapping
-  tex.repeat.set(4, 1)
-  tex.anisotropy = 4
-  tex.needsUpdate = true
-
-  crossSectionTexCache = tex
   return tex
 }

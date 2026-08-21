@@ -1,16 +1,16 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { BufferGeometryUtils } from 'three/examples/jsm/Addons.js'
-import { generateRoadTextures, generateSlabCrossSectionTexture } from '../textures/proceduralTextures'
+import { generateRoadTextures } from '../textures/proceduralTextures'
 import { RoadShader, RoadMarkingShader } from '../shaders/roadShader'
 import { useSimulationStore } from '../store'
 
-// Musterplatte: 5.0m Länge x 3.6m Breite x 0.20m Aufbau (wie Original)
+// Deckschicht: 5.0m Länge x 3.6m Breite x 0.035m Dicke (ca. 3,5 cm Asphaltdeckschicht)
 export const SLAB_LENGTH = 5.0
 export const SLAB_WIDTH = 3.6
-export const SLAB_TOP_Y = 0.101 // Weltkoordinate der Fahrbahnoberfläche
-const SLAB_HEIGHT = 0.2
+export const SLAB_HEIGHT = 0.035
+export const SLAB_TOP_Y = SLAB_HEIGHT
 const HALF_WIDTH = SLAB_WIDTH / 2
 
 // Allokationen aus dem Render-Loop heben (verhindert GC-Stotterer)
@@ -22,10 +22,8 @@ export function RoadStage() {
   // Prozedurale PBR-Texturen (gecacht, 1024x1024, 16x Anisotropie)
   const standardTex = useMemo(() => generateRoadTextures(false), [])
   const grauzitTex = useMemo(() => generateRoadTextures(true), [])
-  const crossSectionTex = useMemo(() => generateSlabCrossSectionTexture(), [])
 
-  // Ein gemergter Dual-Material-Shader für die gesamte Platte (1 Draw Call,
-  // frei ziehbare Vergleichslinie via uSplitX)
+  // Ein gemergter Dual-Material-Shader für die gesamte Platte (1 Draw Call)
   const roadMat = useMemo(() => {
     const mat = new THREE.ShaderMaterial({
       uniforms: THREE.UniformsUtils.clone(RoadShader.uniforms),
@@ -42,15 +40,14 @@ export function RoadStage() {
     return mat
   }, [standardTex, grauzitTex])
 
-  // Geschichteter Straßenaufbau an den Flanken (Deck-, Binder-, Tragschicht)
+  // Solide, dunkle Asphaltkanten der 3,5 cm Deckschicht
   const slabSideMaterial = useMemo(() => {
     return new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#ffffff'),
-      map: crossSectionTex,
-      roughness: 0.85,
-      metalness: 0.02,
+      color: new THREE.Color('#1c1e22'),
+      roughness: 0.92,
+      metalness: 0.03,
     })
-  }, [crossSectionTex])
+  }, [])
 
   // 100% matter Markierungsshader (keine Metallic-Reflexe)
   const markingMat = useMemo(() => {
@@ -85,34 +82,49 @@ export function RoadStage() {
     return BufferGeometryUtils.mergeGeometries([dash1, dash2, leftLine, rightLine])
   }, [])
 
-  // Dynamische Uniforms pro Frame direkt aus dem Store (keine React-Re-Renders)
+  const curDaylight = useRef(1.0)
+  const curRain = useRef(0.0)
+  const curFog = useRef(0.0)
+  const curLightAngle = useRef(45)
+  const curThermal = useRef(0.0)
+
+  // Dynamische Uniforms pro Frame direkt aus dem Store mit weicher Dämpfung
   useFrame(({ clock }, delta) => {
     const s = useSimulationStore.getState()
     const t = clock.getElapsedTime()
-    const lightRad = (s.lightAngle * Math.PI) / 180
+    const lambda = 5.5
+
+    curDaylight.current = THREE.MathUtils.damp(curDaylight.current, s.daylight, lambda, delta)
+    curRain.current = THREE.MathUtils.damp(curRain.current, s.rain, lambda, delta)
+    curFog.current = THREE.MathUtils.damp(curFog.current, s.fog, lambda, delta)
+    curLightAngle.current = THREE.MathUtils.damp(curLightAngle.current, s.lightAngle, lambda, delta)
+    curThermal.current = THREE.MathUtils.damp(curThermal.current, s.thermal ? 1.0 : 0.0, 5.0, delta)
+
+    const dl = curDaylight.current
+    const rn = curRain.current
+    const fg = curFog.current
+    const la = curLightAngle.current
+    const th = curThermal.current
+
+    const lightRad = (la * Math.PI) / 180
 
     _sunDir
       .set(
         Math.sin(lightRad) * 0.45,
-        Math.max(0.75, s.daylight * 1.35),
+        Math.max(0.75, dl * 1.35),
         Math.cos(lightRad) * 0.45
       )
       .normalize()
 
-    const sunIntensity = s.daylight * 2.6
-    _fogColor.set(s.daylight > 0.4 ? '#181c24' : '#08080c')
+    const sunIntensity = dl * 2.6
+    _fogColor.set(dl > 0.4 ? '#181c24' : '#08080c')
 
-    // Weiche Übergänge für Wärmebild
     const u = roadMat.uniforms
-    const thermalTarget = s.thermal ? 1.0 : 0.0
-    const thermalNow = u.uThermal.value as number
-    const thermalNext = thermalNow + (thermalTarget - thermalNow) * Math.min(1, delta * 3.5)
-
-    u.uSplitX.value = s.splitX
-    u.uThermal.value = thermalNext
-    u.uRain.value = s.rain
-    u.uDaylight.value = s.daylight
-    u.uFog.value = s.fog
+    u.uSplitX.value = 0.0
+    u.uThermal.value = th
+    u.uRain.value = rn
+    u.uDaylight.value = dl
+    u.uFog.value = fg
     u.uFogColor.value.copy(_fogColor)
     u.uTime.value = t
     u.uSunDirection.value.copy(_sunDir)
@@ -120,10 +132,10 @@ export function RoadStage() {
     u.uSunIntensity.value = sunIntensity
 
     const m = markingMat.uniforms
-    m.uThermal.value = thermalNext
-    m.uRain.value = s.rain
-    m.uDaylight.value = s.daylight
-    m.uFog.value = s.fog
+    m.uThermal.value = th
+    m.uRain.value = rn
+    m.uDaylight.value = dl
+    m.uFog.value = fg
     m.uFogColor.value.copy(_fogColor)
     m.uSunDirection.value.copy(_sunDir)
     m.uSunColor.value.copy(_sunColor)
@@ -132,27 +144,21 @@ export function RoadStage() {
 
   return (
     <group position={[0, SLAB_HEIGHT / 2, 0]}>
-      {/* 1. FAHRBAHNOBERFLÄCHE: ein Mesh, Dual-Material-Shader mit Wipe */}
-      <mesh position={[0, 0.001, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      {/* 1. FAHRBAHNOBERFLÄCHE: Dual-Material-Shader (Standard vs. GRAUZIT) */}
+      <mesh position={[0, SLAB_HEIGHT / 2 + 0.0005, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[SLAB_WIDTH, SLAB_LENGTH, 2, 2]} />
         <primitive object={roadMat} attach="material" />
       </mesh>
 
-      {/* 2. FAHRBAHNMARKIERUNGEN (matte Kreide-Dispersion, Reflexperlen) */}
-      <mesh geometry={mergedMarkingsGeo}>
+      {/* 2. FAHRBAHNMARKIERUNGEN (Reflexperlen nach DIN EN 1436) */}
+      <mesh geometry={mergedMarkingsGeo} position={[0, SLAB_HEIGHT / 2, 0]}>
         <primitive object={markingMat} attach="material" />
       </mesh>
 
-      {/* 3. STRASSENAUFBAU-QUERSCHNITT (sichtbare Flanken nach RStO) */}
-      <mesh position={[0, -SLAB_HEIGHT / 2 - 0.003, 0]} castShadow receiveShadow>
+      {/* 3. 3,5 cm DECKSCHICHT-KÖRPER (Solide Asphaltflanken) */}
+      <mesh castShadow receiveShadow>
         <boxGeometry args={[SLAB_WIDTH, SLAB_HEIGHT, SLAB_LENGTH]} />
         <primitive object={slabSideMaterial} attach="material" />
-      </mesh>
-
-      {/* 4. SOCKEL-AKZENT */}
-      <mesh position={[0, -SLAB_HEIGHT - 0.015, 0]}>
-        <boxGeometry args={[SLAB_WIDTH + 0.08, 0.018, SLAB_LENGTH + 0.08]} />
-        <meshStandardMaterial color="#16181b" roughness={0.6} metalness={0.8} />
       </mesh>
     </group>
   )

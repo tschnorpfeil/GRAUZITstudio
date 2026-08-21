@@ -57,16 +57,20 @@ export function StudioFloor({ daylight = 1.0 }: StudioFloorProps) {
     })
   }, [])
 
-  useFrame(() => {
+  const curDaylight = useRef(1.0)
+
+  useFrame((_, delta) => {
     if (matRef.current) {
-      matRef.current.uniforms.uDaylight.value = daylight
-      matRef.current.uniforms.uColorCenter.value.copy(nightCenter).lerp(dayCenter, daylight)
-      matRef.current.uniforms.uColorEdge.value.copy(nightEdge).lerp(dayEdge, daylight)
+      curDaylight.current = THREE.MathUtils.damp(curDaylight.current, daylight, 5.5, delta)
+      const dl = curDaylight.current
+      matRef.current.uniforms.uDaylight.value = dl
+      matRef.current.uniforms.uColorCenter.value.copy(nightCenter).lerp(dayCenter, dl)
+      matRef.current.uniforms.uColorEdge.value.copy(nightEdge).lerp(dayEdge, dl)
     }
   })
 
   return (
-    <mesh position={[0, -0.23, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+    <mesh position={[0, -0.002, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
       <circleGeometry args={[24, 64]} />
       <primitive ref={matRef} object={floorMat} attach="material" />
     </mesh>

@@ -36,14 +36,23 @@ export function NightSky({ daylight }: { daylight: number }) {
     return g
   }, [])
 
-  useFrame(() => {
+  const pointsRef = useRef<THREE.Points>(null)
+  const curOpacity = useRef(0.0)
+
+  useFrame((_, delta) => {
+    const targetOpacity = Math.max(0, 1 - daylight * 2.0) * 0.9
+    curOpacity.current = THREE.MathUtils.damp(curOpacity.current, targetOpacity, 5.0, delta)
+
     if (matRef.current) {
-      matRef.current.opacity = Math.max(0, 1 - daylight * 2.2) * 0.9
+      matRef.current.opacity = curOpacity.current
+    }
+    if (pointsRef.current) {
+      pointsRef.current.visible = curOpacity.current > 0.005
     }
   })
 
   return (
-    <points geometry={geo} visible={daylight < 0.45} frustumCulled={false}>
+    <points ref={pointsRef} geometry={geo} frustumCulled={false}>
       <pointsMaterial
         ref={matRef}
         color="#cfe0ff"

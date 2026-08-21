@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import * as Slider from '@radix-ui/react-slider'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, ArrowUpRight } from 'lucide-react'
 import * as THREE from 'three'
-import { useSimulationStore, SLAB_HALF_WIDTH, type SimulationState } from '../store'
+import { useSimulationStore, type SimulationState } from '../store'
 import { GrauzitLogo } from './GrauzitLogo'
 
 const ACCENT = '#f1c302'
@@ -40,7 +40,7 @@ function MetricRow({
         <div className="flex items-center gap-2">
           <div className="h-[5px] flex-1 bg-zinc-800/80">
             <div
-              className="h-full bg-zinc-500 transition-[width] duration-500"
+              className="h-full bg-zinc-500 transition-[width] duration-300 ease-out"
               style={{ width: `${Math.round((invert ? 1 - stdBar : stdBar) * 100)}%` }}
             />
           </div>
@@ -51,7 +51,7 @@ function MetricRow({
         <div className="flex items-center gap-2">
           <div className="h-[5px] flex-1 bg-zinc-800/80">
             <div
-              className="h-full transition-[width] duration-500"
+              className="h-full transition-[width] duration-300 ease-out"
               style={{
                 width: `${Math.round((invert ? 1 - gzBar : gzBar) * 100)}%`,
                 background: GZ_BLUE,
@@ -72,15 +72,43 @@ function MetricsPanel({ onOpenDataSheet }: { onOpenDataSheet: () => void }) {
   const rain = useSimulationStore((s) => s.rain)
   const thermal = useSimulationStore((s) => s.thermal)
 
-  const isNight = daylight < 0.5
+  const [dampedDaylight, setDampedDaylight] = useState(daylight)
+  const [dampedRain, setDampedRain] = useState(rain)
 
-  // Live-Simulationswerte (gemäß Produktdatenblatt interpoliert)
-  const lumStd = THREE.MathUtils.lerp(0.082, 0.082 * 0.35, rain)
-  const lumGz = THREE.MathUtils.lerp(0.113, 0.113 * 0.94, rain)
-  const visStd = THREE.MathUtils.lerp(28, 22, rain)
-  const visGz = THREE.MathUtils.lerp(50, 42, rain)
-  const tempStd = 15.5 + daylight * 32.5 - rain * 6
-  const tempGz = 15.5 + daylight * 18.7 - rain * 6
+  useEffect(() => {
+    let animId: number
+    let lastTime = performance.now()
+
+    const loop = (now: number) => {
+      const delta = Math.min(0.1, (now - lastTime) / 1000)
+      lastTime = now
+
+      setDampedDaylight((prev) => {
+        const next = THREE.MathUtils.damp(prev, daylight, 6.0, delta)
+        return Math.abs(next - daylight) < 0.001 ? daylight : next
+      })
+
+      setDampedRain((prev) => {
+        const next = THREE.MathUtils.damp(prev, rain, 6.0, delta)
+        return Math.abs(next - rain) < 0.001 ? rain : next
+      })
+
+      animId = requestAnimationFrame(loop)
+    }
+
+    animId = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(animId)
+  }, [daylight, rain])
+
+  const isNight = dampedDaylight < 0.5
+
+  // Live-Simulationswerte mit weicher Dämpfung
+  const lumStd = THREE.MathUtils.lerp(0.082, 0.082 * 0.35, dampedRain)
+  const lumGz = THREE.MathUtils.lerp(0.113, 0.113 * 0.94, dampedRain)
+  const visStd = THREE.MathUtils.lerp(28, 22, dampedRain)
+  const visGz = THREE.MathUtils.lerp(50, 42, dampedRain)
+  const tempStd = 15.5 + dampedDaylight * 32.5 - dampedRain * 6
+  const tempGz = 15.5 + dampedDaylight * 18.7 - dampedRain * 6
 
   return (
     <div className="pointer-events-auto hidden min-w-[300px] flex-col border border-zinc-800 bg-[#090b10]/88 p-4 shadow-xl backdrop-blur-md md:flex">
@@ -187,16 +215,12 @@ const CAMERAS: { id: SimulationState['cameraMode']; label: string }[] = [
 
 function ControlDeck() {
   const condition = useSimulationStore((s) => s.condition)
-  const splitX = useSimulationStore((s) => s.splitX)
   const thermal = useSimulationStore((s) => s.thermal)
   const cameraMode = useSimulationStore((s) => s.cameraMode)
   const setCondition = useSimulationStore((s) => s.setCondition)
-  const setSplitX = useSimulationStore((s) => s.setSplitX)
   const setThermal = useSimulationStore((s) => s.setThermal)
   const setCameraMode = useSimulationStore((s) => s.setCameraMode)
   const reset = useSimulationStore((s) => s.reset)
-
-  const gzShare = Math.round(((SLAB_HALF_WIDTH - splitX) / (SLAB_HALF_WIDTH * 2)) * 100)
 
   return (
     <div className="pointer-events-auto mx-auto flex w-full max-w-2xl flex-col items-center gap-2">
@@ -243,30 +267,6 @@ function ControlDeck() {
             <Slider.Thumb
               className="block h-4 w-4 cursor-grab border border-[#3875cc] bg-white transition-colors hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white active:cursor-grabbing"
               aria-label="Szenario-Regler"
-            />
-          </Slider.Root>
-        </div>
-
-        {/* GRAUZIT-Anteil (Vergleichslinie) */}
-        <div className="space-y-1 px-1">
-          <div className="flex items-center justify-between text-[9px] font-mono uppercase tracking-widest">
-            <span className="text-zinc-500">Vergleichslinie</span>
-            <span className="font-bold text-[#f1c302]">GRAUZIT-Anteil: {gzShare} %</span>
-          </div>
-          <Slider.Root
-            className="relative flex h-5 w-full cursor-pointer touch-none select-none items-center"
-            value={[SLAB_HALF_WIDTH - splitX]}
-            max={SLAB_HALF_WIDTH * 2}
-            min={0}
-            step={0.01}
-            onValueChange={(vals) => setSplitX(SLAB_HALF_WIDTH - vals[0])}
-          >
-            <Slider.Track className="relative h-1 grow bg-zinc-800">
-              <Slider.Range className="absolute h-full bg-[#f1c302]/80" />
-            </Slider.Track>
-            <Slider.Thumb
-              className="block h-4 w-4 cursor-grab border border-[#f1c302] bg-white transition-colors hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white active:cursor-grabbing"
-              aria-label="Vergleichslinie"
             />
           </Slider.Root>
         </div>
@@ -338,14 +338,14 @@ export function HUD() {
             <div className="flex items-center gap-2 border border-zinc-800/80 bg-black/70 px-2.5 py-1">
               <span className="block h-2 w-2 bg-zinc-600" />
               <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-300">
-                Standard-Asphalt
+                Linke Spur: Standard
               </span>
             </div>
-            <span className="font-mono text-[10px] text-[#f1c302]">◂▸</span>
+            <span className="font-mono text-[10px] text-zinc-600">vs.</span>
             <div className="flex items-center gap-2 border border-[#25589e]/80 bg-[#0d284f]/70 px-2.5 py-1">
               <span className="block h-2 w-2" style={{ background: GZ_BLUE }} />
               <span className="text-[10px] font-semibold uppercase tracking-wider text-white">
-                GRAUZIT® 50/50
+                Rechte Spur: GRAUZIT® 50/50
               </span>
             </div>
           </div>
@@ -357,8 +357,7 @@ export function HUD() {
       {/* FUSSBEREICH */}
       <div className="flex flex-col gap-2">
         <div className="pointer-events-none mx-auto text-[10px] font-mono uppercase tracking-widest text-zinc-500">
-          <span style={{ color: ACCENT }}>◆</span>&ensp;Goldene Linie im 3D ziehen oder Regler
-          nutzen&ensp;·&ensp;Maus: Orbit &amp; Zoom
+          <span style={{ color: ACCENT }}>◆</span>&ensp;Direkter Spurvergleich&ensp;·&ensp;Maus: Orbit &amp; Zoom
         </div>
         <ControlDeck />
       </div>

@@ -2,12 +2,10 @@ import * as THREE from 'three'
 
 /**
  * AAA Dual-Material Road Surface Shader (Standard-Asphalt vs. GRAUZIT 50/50)
- * - Beide Materialsysteme in EINEM Shader, getrennt durch eine frei ziehbare
- *   Vergleichslinie (uSplitX in Weltkoordinaten) -> interaktiver Wipe
- * - Wärmebild-Modus (uThermal) mit Ironbow-Palette für Urban-Heat-Island-Demo
- * - Maximale Performance: ein Draw Call, keine Loops, kein Postprocessing
- * - Kontinuierliche Mikro-Hydrologie & physikalisches Wasser-Pooling
- * - CIE 144 Klasse A Photometrie mit diffuser Quarz-Retroreflexion
+ * - Beide Materialsysteme in EINEM Shader, getrennt durch mittige Trennlinie (x = 0)
+ * - CIE 144 Klasse A Photometrie mit kristalliner Quarz-Retroreflexion
+ * - Ausgewogene HDR-Luminanz: Reiche Texturdetails in beiden Spuren bei Tag & Nacht
+ * - Wärmebild-Modus (uThermal) mit Ironbow-Palette
  */
 
 export const RoadShader = {
@@ -83,7 +81,7 @@ export const RoadShader = {
 
     #define PI 3.14159265359
 
-    // Ultraschnelle Anti-Aliased Regen-Ripples in Weltkoordinaten (loop-frei)
+    // Anti-Aliased Regen-Ripples in Weltkoordinaten
     vec3 getRainRipples(vec2 wp, float time, float intensity) {
       if (intensity < 0.005) return vec3(0.0, 1.0, 0.0);
 
@@ -108,7 +106,7 @@ export const RoadShader = {
       return k * k * (1.0 / PI);
     }
 
-    // PBR: Smith Joint GGX Visibility (optimiert)
+    // PBR: Smith Joint GGX Visibility
     float V_SmithGGXCorrelated(float NoV, float NoL, float roughness) {
       float a2 = roughness * roughness;
       float GGXV = NoL * sqrt(NoV * NoV * (1.0 - a2) + a2);
@@ -124,13 +122,13 @@ export const RoadShader = {
     // Studio-Umgebung: Overhead-Softbox & Bühnenreflexion für Pfützenspiegelung
     vec3 getStudioReflection(vec3 reflDir) {
       float upFactor = max(0.0, reflDir.y);
-      vec3 studioBase = mix(vec3(0.02, 0.025, 0.035), vec3(0.16, 0.20, 0.26), pow(upFactor, 2.2));
+      vec3 studioBase = mix(vec3(0.03, 0.035, 0.045), vec3(0.18, 0.22, 0.28), pow(upFactor, 2.2));
 
       float mainSoftbox = smoothstep(0.62, 0.98, reflDir.y) * smoothstep(0.72, 0.0, abs(reflDir.x));
       float fillSoftbox = smoothstep(0.38, 0.85, reflDir.y) * smoothstep(0.85, 0.2, abs(reflDir.z));
 
-      vec3 softboxGlow = vec3(1.2, 1.25, 1.3) * (mainSoftbox * 2.8 + fillSoftbox * 0.9);
-      return (studioBase + softboxGlow) * mix(0.12, 1.0, uDaylight);
+      vec3 softboxGlow = vec3(1.1, 1.15, 1.2) * (mainSoftbox * 2.2 + fillSoftbox * 0.8);
+      return (studioBase + softboxGlow) * mix(0.20, 1.0, uDaylight);
     }
 
     // Standard-PBR-Lichtberechnung
@@ -152,28 +150,40 @@ export const RoadShader = {
       return (diffuse + specular) * lightColor * NoL;
     }
 
-    // Photometrischer Abblendlicht-Beam (ECE R149) mit GRAUZIT-Retroreflexion
+    // Photometrischer Abblendlicht-Beam (ECE R149) mit CIE-144-Retroreflexion
     vec3 calcHeadlightPBR(vec3 hPos, vec3 pNormal, vec3 viewDir, vec3 albedo, float roughness, vec3 F0, float isPuddle, float isGz) {
       vec3 lightVec = hPos - vWorldPosition;
       float dist = length(lightVec);
-      vec3 lightDir = lightVec / dist;
+      vec3 lightDir = lightVec / dist; // Vom Punkt zur Lampe
 
-      float forwardFactor = max(0.20, -lightDir.z);
-      float atten = (1.0 / (1.0 + 0.02 * dist + 0.003 * dist * dist)) * pow(forwardFactor, 1.35);
+      // Scheinwerfer-Hauptachse: Strahlung nach vorne (-Z) und leicht nach unten
+      vec3 beamAim = normalize(vec3(0.0, -0.12, -1.0));
+      vec3 rayFromLamp = -lightDir;
+      float cosAngle = dot(rayFromLamp, beamAim);
+
+      // Weicher ECE-R149-Kegelabfall
+      float spotFactor = smoothstep(0.40, 0.96, cosAngle);
+      float atten = (1.0 / (1.0 + 0.08 * dist + 0.015 * dist * dist)) * spotFactor;
 
       vec3 brdf = calcPBR(lightDir, vec3(1.0), pNormal, viewDir, albedo, roughness, F0);
 
-      // Diffuse Retroreflexion: GRAUZIT-Quarzkristalle streuen den Beam zurück zum Fahrer
+      // Diffuse Retroreflexion (CIE 144):
+      // GRAUZIT streut ~45% mehr Licht diffus zum Fahrer zurück (q0 = 0.113 vs 0.082).
+      // Bei Nässe bleibt GRAUZIT erhalten (1.25), während Standard-Asphalt zum dunklen Spiegel wird (0.38).
       float retroScatter = mix(
-        mix(1.0, 0.35, isPuddle),
-        mix(4.2, 5.5, isPuddle),
+        mix(1.0, 0.38, isPuddle),
+        mix(1.48, 1.25, isPuddle),
         isGz
       );
 
-      return brdf * atten * 34.0 * vec3(1.0, 0.97, 0.93) * retroScatter;
+      // Subtiles kristallines Glitzern der Quarzit-Kanten
+      vec3 halfVec = normalize(viewDir + lightDir);
+      float glint = isGz * pow(max(0.0, dot(pNormal, halfVec)), 28.0) * (1.0 - isPuddle * 0.4) * 0.20;
+
+      return (brdf * retroScatter + glint * vec3(1.0, 0.98, 0.95)) * atten * 18.0 * vec3(1.0, 0.98, 0.95);
     }
 
-    // Intuitive Thermografie-Palette (Turbo-Stil: blau=kalt, rot=heiß)
+    // Thermografie-Palette (Turbo-Stil)
     vec3 ironbow(float t) {
       t = clamp(t, 0.0, 1.0);
       vec3 col = mix(vec3(0.05, 0.04, 0.35), vec3(0.02, 0.55, 0.85), smoothstep(0.0, 0.30, t));
@@ -185,10 +195,10 @@ export const RoadShader = {
     }
 
     void main() {
-      // 0. MATERIALZONE: rechts der Trennlinie liegt GRAUZIT
+      // 0. MATERIALZONE: rechts der Trennlinie (x > 0) liegt GRAUZIT
       float isGz = smoothstep(uSplitX - 0.012, uSplitX + 0.012, vWorldPosition.x);
 
-      // 1. ANISOTROPES UV-MAPPING mit Welt-Warp (kein Moiré, keine sichtbare Kachelung)
+      // 1. ANISOTROPES UV-MAPPING mit Welt-Warp
       vec2 uvWarp = vec2(
         sin(vWorldPosition.z * 0.8 + vWorldPosition.x * 1.3),
         cos(vWorldPosition.x * 1.1 - vWorldPosition.z * 0.7)
@@ -199,47 +209,44 @@ export const RoadShader = {
       vec3 stoneNormal = mix(texture2D(uNormalStd, tileUv).rgb, texture2D(uNormalGz, tileUv).rgb, isGz) * 2.0 - 1.0;
       vec4 roughHeightTex = mix(texture2D(uRoughStd, tileUv), texture2D(uRoughGz, tileUv), isGz);
 
-      // DETAIL-LAYER (Dual-Scale, irrationaler Faktor -> keine sichtbare Wiederholung):
-      // bricht Blob-Artefakte in Makro-Nähe auf und verfeinert die Splitt-Struktur
+      // DETAIL-LAYER (Dual-Scale für Makro-Schärfe)
       vec2 detailUv = tileUv * 3.73;
       vec4 albedoDet = mix(texture2D(uAlbedoStd, detailUv), texture2D(uAlbedoGz, detailUv), isGz);
       vec3 normalDet = mix(texture2D(uNormalStd, detailUv).rgb, texture2D(uNormalGz, detailUv).rgb, isGz) * 2.0 - 1.0;
-      albedoTex.rgb = albedoTex.rgb * 0.62 + albedoDet.rgb * 0.38 + 0.02;
-      stoneNormal = normalize(stoneNormal + normalDet * 0.65);
+      albedoTex.rgb = albedoTex.rgb * 0.65 + albedoDet.rgb * 0.35;
+      stoneNormal = normalize(stoneNormal + normalDet * 0.60);
 
       float stoneRoughness = roughHeightTex.r;
       float macroHeight = roughHeightTex.g;
 
-      // 2. ROLLSPUREN-PATINA: zwei Radspuren auf der Musterplatte
+      // 2. ROLLSPUREN-PATINA
       float laneTrackLeft = exp(-pow((vUv.x - 0.24) / 0.10, 2.0));
       float laneTrackRight = exp(-pow((vUv.x - 0.76) / 0.10, 2.0));
-      float rollspuren = (laneTrackLeft + laneTrackRight) * 0.045;
+      float rollspuren = (laneTrackLeft + laneTrackRight) * 0.04;
       float wearModulation = 1.0 - rollspuren;
 
-      // 3. MAKRO-VARIATION & natürliche Cluster
+      // 3. MAKRO-VARIATION
       float macroClustering = sin(vWorldPosition.x * 1.4 + sin(vWorldPosition.z * 0.9) * 1.4) * cos(vWorldPosition.z * 1.1);
-      float macroLuminance = (1.0 + macroClustering * 0.06) * wearModulation;
+      float macroLuminance = (1.0 + macroClustering * 0.05) * wearModulation;
 
-      // 4. PROGRESSIVE MIKRO-HYDROLOGIE (Wasser sammelt sich in Splitt-Zwischenräumen)
+      // 4. PROGRESSIVE MIKRO-HYDROLOGIE (Wasser in Zwischenräumen)
       float waterDepth = uRain * 1.35;
       float isPuddle = clamp((waterDepth - macroHeight * 0.75) / 0.9, 0.0, 1.0);
 
       vec3 waterNormal = getRainRipples(vWorldPosition.xz, uTime, uRain);
-
       vec3 stoneWorldNormal = normalize(vWorldNormal + vec3(stoneNormal.x, 0.0, stoneNormal.y) * (1.0 - isPuddle * 0.85));
       vec3 finalNormal = normalize(mix(stoneWorldNormal, waterNormal, isPuddle * uRain * 0.9));
 
-      // 5. OPTISCHE WASSER-VERDUNKELUNG (CIE 144): Standard säuft ab, GRAUZIT bleibt hell
-      float stdDarkening = 1.0 - uRain * 0.65;
-      float gzDarkening = 1.0 - uRain * 0.06;
+      // 5. OPTISCHE WASSER-VERDUNKELUNG (CIE 144)
+      float stdDarkening = 1.0 - uRain * 0.46;
+      float gzDarkening = 1.0 - uRain * 0.10;
       float wetAlbedoFactor = mix(stdDarkening, gzDarkening, isGz);
 
-      // GRAUZIT Leuchtdichte-Boost (CIE Klasse A, q0 = 0.113)
-      vec3 finalAlbedo = albedoTex.rgb * wetAlbedoFactor * mix(1.0, 1.38, isGz) * macroLuminance;
+      vec3 finalAlbedo = albedoTex.rgb * wetAlbedoFactor * macroLuminance;
 
       // 6. KONTINUIERLICHE ROUGHNESS & FRESNEL
       float dryRoughness = stoneRoughness * stoneRoughness;
-      float finalRoughness = mix(dryRoughness, 0.018, clamp(uRain * 0.65 + isPuddle * 0.35, 0.0, 0.98));
+      float finalRoughness = mix(dryRoughness, 0.02, clamp(uRain * 0.65 + isPuddle * 0.35, 0.0, 0.98));
 
       vec3 F0_stone = vec3(0.04);
       vec3 F0_water = vec3(0.02);
@@ -248,15 +255,11 @@ export const RoadShader = {
       // 7. SONNE & STUDIO-LICHT (GGX PBR)
       vec3 sunBRDF = calcPBR(uSunDirection, uSunColor * uSunIntensity, finalNormal, vViewDirection, finalAlbedo, finalRoughness, finalF0);
 
-      // Ambient-Anteil: nachts bewusst niedrig, damit der Kontrast real bleibt
-      float ambientFactor = mix(0.18, 0.48, uDaylight);
+      // Ausgewogenes Ambiente bei Tag und Nacht
+      float ambientFactor = mix(0.14, 0.45, uDaylight);
       vec3 ambientDiffuse = finalAlbedo * ambientFactor * (1.0 / PI);
 
-      // 8. PASSIVE NACHT-LUMINANZ der Quarzkristalle (GRAUZIT bleibt sichtbar)
-      float nightQuartzBoost = isGz * (1.0 - uDaylight * 0.70) * 0.12;
-      vec3 quartzNightLuminance = finalAlbedo * nightQuartzBoost;
-
-      // 9. AUTOMATISCHES ABBLENDLICHT (linearer Fade unter Daylight 0.55)
+      // 8. AUTOMATISCHES ABBLENDLICHT (linearer Fade unter Daylight 0.55)
       float autoHeadlight = clamp((0.55 - uDaylight) / 0.55, 0.0, 1.0);
       vec3 headlightTotal = vec3(0.0);
 
@@ -266,26 +269,26 @@ export const RoadShader = {
         headlightTotal = (h1 + h2) * autoHeadlight;
       }
 
-      // 10. UMGEBUNGS- & PFÜTZENREFLEXION (Studio-Softboxen)
+      // 9. UMGEBUNGS- & PFÜTZENREFLEXION
       vec3 reflVec = reflect(-vViewDirection, finalNormal);
       vec3 envReflection = getStudioReflection(reflVec);
       float NoV = clamp(dot(finalNormal, vViewDirection), 0.0, 1.0);
       vec3 fresnelEnv = F_Schlick(NoV, finalF0);
       vec3 puddleReflection = envReflection * fresnelEnv * isPuddle * (1.0 - finalRoughness);
 
-      // Splitt-Zwischenraum-Selbstverschattung (taktile 3D-Tiefe)
-      float creviceAO = mix(0.72 + 0.28 * macroHeight, 1.0, isPuddle);
+      // Splitt-Zwischenraum-Selbstverschattung
+      float creviceAO = mix(0.75 + 0.25 * macroHeight, 1.0, isPuddle);
 
-      vec3 finalColor = (ambientDiffuse * creviceAO) + quartzNightLuminance + sunBRDF + headlightTotal + puddleReflection;
+      vec3 finalColor = (ambientDiffuse * creviceAO) + sunBRDF + headlightTotal + puddleReflection;
 
-      // 11. ATMOSPHÄRISCHER NEBEL & STREUUNG
+      // 10. ATMOSPHÄRISCHER NEBEL & STREUUNG
       if (uFog > 0.005) {
         float distToCam = length(cameraPosition - vWorldPosition);
         float fogFactor = 1.0 - exp(-pow(distToCam * uFog * 0.18, 1.6));
         finalColor = mix(finalColor, uFogColor, clamp(fogFactor, 0.0, 0.96));
       }
 
-      // 12. WÄRMEBILD-MODUS (Ironbow): Standard speichert Hitze, GRAUZIT bleibt kühl
+      // 11. WÄRMEBILD-MODUS (Ironbow)
       if (uThermal > 0.001) {
         float tempC = mix(mix(48.0, 34.2, isGz), 15.5, 1.0 - uDaylight);
         tempC -= uRain * 6.0;
@@ -302,13 +305,13 @@ export const RoadShader = {
 
 /**
  * Authentischer Thermoplastik-Markierungsshader (DIN EN 1436 / ZTV M 13)
- * - 100% matte, nicht-metallische Kreidedispersion (kein Grazing-Fresnel-Glanz)
- * - Reflexperlen-Retroreflexion (Photonen zurück zum Fahrer bei Nacht)
- * - Wärmebild-kompatibel
+ * - Weisse, mikroporöse Fahrbahnmarkierung
+ * - Kristalline Reflexperlen-Retroreflexion (DIN EN 1436 RL-Klasse)
+ * - Reflektiert und strahlt bei Tageslicht, Scheinwerfern und aus allen Blickwinkeln
  */
 export const RoadMarkingShader = {
   uniforms: {
-    uColor: { value: new THREE.Color('#d4d9de') },
+    uColor: { value: new THREE.Color('#e8edf2') },
     uDaylight: { value: 1.0 },
     uRain: { value: 0.0 },
     uFog: { value: 0.0 },
@@ -368,42 +371,50 @@ export const RoadMarkingShader = {
     }
 
     void main() {
-      // 1. KREIDIG-PORÖSE MIKROTEXTUR (Heißplastik mit Mineral-Zuschlag)
-      float grain = sin(vWorldPosition.x * 240.0) * cos(vWorldPosition.z * 240.0) * 0.035;
-      vec3 paintBase = uColor + vec3(grain);
+      // 1. KREIDIG-PORÖSE MIKROTEXTUR (Heißplastik mit Reflexperlen nach DIN EN 1436)
+      float grain = sin(vWorldPosition.x * 220.0) * cos(vWorldPosition.z * 220.0) * 0.025;
+      vec3 paintBase = clamp(uColor + vec3(grain), 0.0, 1.0);
 
-      // 2. REIN DIFFUSE SONNENSTREUUNG (kein Spiegel-Glanz!)
-      float NoL = clamp(dot(vWorldNormal, uSunDirection), 0.0, 1.0);
-      vec3 sunDiffuse = paintBase * (uSunColor * uSunIntensity) * NoL * (1.0 / PI);
+      // 2. DIFFUSE SONNENSTREUUNG AM TAG
+      float NoL_sun = clamp(dot(vWorldNormal, uSunDirection), 0.0, 1.0);
+      vec3 sunDiffuse = paintBase * (uSunColor * uSunIntensity) * NoL_sun * (1.0 / PI);
 
-      // 3. AMBIENTE STREUUNG
-      float ambientFactor = mix(0.04, 0.32, uDaylight);
+      // 3. AMBIENTE STREUUNG (garantiert Grundsichtbarkeit in jeder Lichtphase)
+      float ambientFactor = mix(0.18, 0.48, uDaylight);
       vec3 ambientDiffuse = paintBase * ambientFactor * (1.0 / PI);
 
-      // 4. RETROREFLEKTIERENDE GLASPERLEN (Reflexperlen nach DIN EN 1436)
-      float autoHeadlight = clamp((0.50 - uDaylight) / 0.50, 0.0, 1.0);
+      // 4. RETROREFLEKTIERENDE GLASPERLEN (DIN EN 1436 / ECE R149)
+      float autoHeadlight = clamp((0.55 - uDaylight) / 0.55, 0.0, 1.0);
       vec3 headlightTotal = vec3(0.0);
 
       if (autoHeadlight > 0.001) {
+        vec3 beamAim = normalize(vec3(0.0, -0.12, -1.0));
+
+        // Scheinwerfer 1
         vec3 lVec1 = uHeadlightPos1 - vWorldPosition;
         float d1 = length(lVec1);
-        vec3 lDir1 = lVec1 / d1;
-        float atten1 = (1.0 / (1.0 + 0.04 * d1 + 0.01 * d1 * d1)) * pow(max(0.0, -lDir1.z), 2.5);
-        float retro1 = max(0.0, dot(vViewDirection, lDir1));
-        vec3 h1 = paintBase * (atten1 * 22.0) * (pow(retro1, 4.0) * 2.2 + 0.35);
+        vec3 lDir1 = lVec1 / d1; // Vom Punkt zur Lampe
+        float spot1 = smoothstep(0.38, 0.96, dot(-lDir1, beamAim));
+        float atten1 = (1.0 / (1.0 + 0.08 * d1 + 0.015 * d1 * d1)) * spot1;
+        float NoL1 = clamp(dot(vWorldNormal, lDir1), 0.0, 1.0);
+        float retro1 = clamp(dot(vViewDirection, lDir1), 0.0, 1.0);
+        vec3 h1 = paintBase * (atten1 * 20.0) * (NoL1 * (1.0 / PI) + pow(retro1, 4.0) * 3.4 + 0.25);
 
+        // Scheinwerfer 2
         vec3 lVec2 = uHeadlightPos2 - vWorldPosition;
         float d2 = length(lVec2);
         vec3 lDir2 = lVec2 / d2;
-        float atten2 = (1.0 / (1.0 + 0.04 * d2 + 0.01 * d2 * d2)) * pow(max(0.0, -lDir2.z), 2.5);
-        float retro2 = max(0.0, dot(vViewDirection, lDir2));
-        vec3 h2 = paintBase * (atten2 * 22.0) * (pow(retro2, 4.0) * 2.2 + 0.35);
+        float spot2 = smoothstep(0.38, 0.96, dot(-lDir2, beamAim));
+        float atten2 = (1.0 / (1.0 + 0.08 * d2 + 0.015 * d2 * d2)) * spot2;
+        float NoL2 = clamp(dot(vWorldNormal, lDir2), 0.0, 1.0);
+        float retro2 = clamp(dot(vViewDirection, lDir2), 0.0, 1.0);
+        vec3 h2 = paintBase * (atten2 * 20.0) * (NoL2 * (1.0 / PI) + pow(retro2, 4.0) * 3.4 + 0.25);
 
         headlightTotal = (h1 + h2) * autoHeadlight;
       }
 
-      float wetDarkening = 1.0 - uRain * 0.18;
-      vec3 finalColor = (ambientDiffuse + sunDiffuse + headlightTotal) * wetDarkening;
+      float wetRetention = 1.0 - uRain * 0.18;
+      vec3 finalColor = (ambientDiffuse + sunDiffuse + headlightTotal) * wetRetention;
 
       if (uFog > 0.005) {
         float distToCam = length(cameraPosition - vWorldPosition);
@@ -411,9 +422,9 @@ export const RoadMarkingShader = {
         finalColor = mix(finalColor, uFogColor, clamp(fogFactor, 0.0, 0.96));
       }
 
-      // Wärmebild: helle Markierung reflektiert Sonne, bleibt kühler als Asphalt
+      // Wärmebild-Modus
       if (uThermal > 0.001) {
-        float tempC = mix(33.0, 15.0, 1.0 - uDaylight) - uRain * 6.0;
+        float tempC = mix(32.0, 15.0, 1.0 - uDaylight) - uRain * 6.0;
         float tn = clamp((tempC - 8.0) / 48.0, 0.0, 1.0);
         finalColor = mix(finalColor, ironbow(tn), uThermal);
       }

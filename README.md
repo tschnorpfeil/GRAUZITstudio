@@ -6,9 +6,8 @@ bei Tag, Nacht, Starkregen und im Wärmebild.
 
 ## Features
 
-- **Frei ziehbare Vergleichslinie** — die goldene Linie lässt sich direkt im 3D
-  (oder per Regler) über die Platte ziehen: der Kunde „streicht" die Fahrbahn
-  selbst mit GRAUZIT ein.
+- **Direkter 2-Spur-Vergleich** — Linke Spur: Standard-Asphalt, Rechte Spur: GRAUZIT® 50/50
+  Edelsplitt, getrennt durch normkonforme Fahrbahnmarkierung (StVO).
 - **Kontinuierlicher Szenario-Regler** — Tag → Dämmerung → Nacht → Starkregen,
   mit automatischem ECE-R149-Abblendlicht bei Nacht.
 - **Wärmebild-Modus** — simulierte Thermografie (Turbo-Palette) zeigt den
